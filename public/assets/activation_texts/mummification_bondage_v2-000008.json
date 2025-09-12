@@ -1,0 +1,7 @@
+{
+    "activation text": "mummification, mummified, duct tape, packing tape, gagged, off shoulder, breasts out, frontview, sideview, backview",
+    "description": "Tape mummification bondage. Works best on realistic models, but may work on some anime models as well. LoRA weight 1.0 is fine. Add more weight if using anime models.Sometimes generates extra persons in an image, despite the prompt dictating otherwise.Trigger words: mummified, duct tape, off shoulder, breasts out, blindfolded (very inconsistent)Recommended negatives: easynegative, ng_deepnegative_v1_75t, verybadimagenegative_v1.3, hands",
+    "sd version": "SD1",
+    "modelId": 147126,
+    "sha256": "A1C05EA553855970129C8A6FA7C96D84318398DB9559F778249A36B0859EF462"
+}

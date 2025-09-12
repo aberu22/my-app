@@ -1,0 +1,7 @@
+{
+    "activation text": "b4llg4g, large ball gag, gagged",
+    "description": "If you like the model, please add image to the model page + Add Post and leave a review, it really helps. The buzz makes it easier for me to make improvements/train new models. PONY V2:Prompting: b4llg4g, large ball gag, gagged,This is a much cleaner version of the pony model that won't introduce blurriness like V1FLUX:Prompting: (Subject) gagged with large (color) b4llg4g in mouth with rivets and leather strapsCapable of decent nudity without support from other LoRasCan do medium/normal size by not mentioning \"large\" and saliva with \"saliva. (Better at full strength)If trying to do non-realistic style and having issues, either increase strength of other lora or lower this lora's strength to 0.85To animate:1.) https://hailuoai.video/ https://hailuoai.video/2.) Image to Video3.) Close-up images will usually result in it rejecting the image, full body images it tends to be find with4.) Prompt: a young woman with a large ball strapped in her mouth shifts around uncomfortably in place, her arms remain behind her back as she is restrained, her chest rises and falls with each breath she takesOr use the workflow linked in suggested resourcesPrompts can be found in all of the videos.",
+    "sd version": "Other",
+    "modelId": 999177,
+    "sha256": "968D9F706EF638BEBFB6C75E30EEDA6F4FBEE8DD467C794735DB8A60100F5F80"
+}

@@ -1,0 +1,8 @@
+{
+    "activation text": "",
+    "description": "V2:I retrained it on a bigger dataset with sligtly different settings and lower rank. It doesn't destroy the picture that much when higher lora weight is used and works better with shorter prompts.V1:Trained on 90 pictures for 100 epochs. Works best at 0.5-0.7 strength, after that the output becomes fuzzy. It seems to prefer lenghty and detailed prompts.",
+    "sd version": "Other",
+    "modelId": 731221,
+    "sha256": "F9241F80C869FE20AC10E3262870CB77BB2ED82471E9771C4255450430875647",
+    "modelVersionId": 837320
+}

@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // This rule allows anyone with your Firestore database reference to view, edit,
+    // and delete all data in your Firestore database. It is useful for getting
+    // started, but it is configured to expire after 30 days because it
+    // leaves your app open to attackers. At that time, all client
+    // requests to your Firestore database will be denied.
+    //
+    // Make sure to write security rules for your app before that time, or else
+    // all client requests to your Firestore database will be denied until you Update
+    // your rules
+    // ✅ Users can read/write their own data (Profiles, Credits, Subscription)
+    // ✅ Allow Stripe Webhooks to update user subscription status..test
+    match /users/{userId} {
+      // 🔹 Users can read & write their own data
+      allow read, update, write: if request.auth != null && request.auth.uid == userId;
+
+      // 🔹 Allow reading of non-sensitive public fields (ONLY IF NECESSARY)
+      allow read: if request.auth != null; 
+
+      // 🔹 Allow Stripe Webhooks to update subscription-related fields
+      allow update: if request.auth == null && request.resource.data.subscriptionStatus != null;
+
+      // ❌ Remove Stripe Webhook rule from here. Handle it via Firebase Functions.
+    }
+
+    // ✅ Allow ALL users (even non-authenticated) to read public images
+    match /images/{documentId} {
+      allow read: if true; // 🔹 Allow public access to images
+
+      // ✅ Only the owner can write, update, and delete their images
+      allow write: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+
+    // ✅ Secure Comments (Subcollection of images)
+    match /images/{documentId}/comments/{commentId} {
+      allow read: if request.auth != null;
+      allow write, delete: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+  }
+}
+ 
+    
+  

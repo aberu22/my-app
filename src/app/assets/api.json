@@ -1,0 +1,80 @@
+[
+    {
+        "image_url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/1068e7d8-e7ed-49a9-ae61-ae7e7cbb0f00/width=512/167154.jpeg",
+        "prompt": "portrait of a award winning photo of hugh laurie posing in a dark studio, (rim lighting,:1.4) two tone lighting, sharp focus, teal hue, octane, unreal, dimly lit, low key,  <lora:epiNoiseoffset_v2:1>",
+        "negative_prompt": "asian, chinese, lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature",
+        "seed": "2467180841",
+        "size": "512x768",
+        "model": "epi_hyperphotogodess",
+        "sampler": "DDIM",
+        "steps": "28",
+        "cfg_scale": "5",
+        "resources": "",
+        "model_hash": ""
+    },
+    {
+        "image_url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/22f5f5b4-d106-4019-32f3-ed3d64ac1800/width=1024/178275.jpeg",
+        "prompt": "product shot of ultra realistic juicy cheeseburger against a dark background, two tone lighting, advertisement, octane, unreal  <lora:epiNoiseoffset_v2:1>",
+        "negative_prompt": "text, error, cropped, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, deformed, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature",
+        "seed": "810934608",
+        "size": "512x768",
+        "model": "epi_hyperphotogodess",
+        "sampler": "DDIM",
+        "steps": "28",
+        "cfg_scale": "5",
+        "resources": "",
+        "model_hash": ""
+    },
+    {
+        "image_url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/bd17d3db-aa7a-429f-8b87-7063f0615000/width=512/167153.jpeg",
+        "prompt": "steampunk woman, highly detailed face and body portrait by wlop. fantasy art from dnd extremely beautiful style of ilya kuvshinov on greg rutkowski in the shell 1 9 7 0 s oil painting full length illustration sharp focus norman rockwell trending pixiv fanbox concept quality cinema model madison beer as ariana grande popart thomas <lora:epiNoiseoffset_v2:1>",
+        "negative_prompt": "asian, chinese, lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature",
+        "seed": "1684828904",
+        "size": "512x768",
+        "model": "epi_hyperphotogodess",
+        "sampler": "DPM++ 2M Karras",
+        "steps": "30",
+        "cfg_scale": "7",
+        "resources": "",
+        "model_hash": ""
+    },
+    {
+        "image_url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/11466716-a836-4772-7f10-be3e382bb700/width=512/167152.jpeg",
+        "prompt": "cell shading, digital art, bloom, dark and gloomy full body 8k unity render, female teen cyborg, Blue yonder hair, wearing broken battle armor, at cluttered and messy shack , action shot, tattered torn shirt, porcelain cracked skin, skin pores, detailed intricate iris, very dark lighting, heavy shadows, detailed, detailed face, (vibrant, dramatic, dark, sharp focus, 8k), donglu <lora:epiNoiseoffset_v2:1>",
+        "negative_prompt": "text, error, cropped, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, deformed, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature",
+        "seed": "4081488779",
+        "size": "512x768",
+        "model": "epi_hyperphotogodess",
+        "sampler": "DDIM",
+        "steps": "28",
+        "cfg_scale": "6",
+        "resources": "",
+        "model_hash": ""
+    },
+    {
+        "image_url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/b35e93dd-c8c3-4e6c-88ba-87f5aac11500/width=1024/178281.jpeg",
+        "prompt": "cell shading, digital art, dark and gloomy full body 8k unity render, female teen cyborg, Blue yonder hair, wearing broken battle armor, at cluttered and messy shack , action shot, tattered torn shirt, porcelain cracked skin, skin pores, detailed intricate iris, very dark lighting, heavy shadows, detailed, detailed face, (vibrant, dramatic, dark, sharp focus, 8k)  <lora:epiNoiseoffset_v2:2>",
+        "negative_prompt": "asian, chinese, lowres, text, error, cropped, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, out of frame, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck, username, watermark, signature",
+        "seed": "4081488777",
+        "size": "512x768",
+        "model": "epi_hyperphotogodess",
+        "sampler": "DPM++ 2M Karras",
+        "steps": "28",
+        "cfg_scale": "6",
+        "resources": "",
+        "model_hash": ""
+    },
+    {
+        "image_url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/dbc8b8b2-a489-46be-501e-5fd423ca3c00/width=1024/178280.jpeg",
+        "prompt": "night, moon Cinematic light, intricate detail, detailed facial features, high detail, sharp focus, smooth, aesthetic, extremely detailed, (by greg rutkowski:1), (by luis royo:1), by artgerm, Stephen Kasner, John Picacio <lora:epiNoiseoffset_v2:1>",
+        "negative_prompt": "lowres, (((bad anatomy))), bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worstquality, low quality, normal quality,jpegartifacts,signature, watermark, username,blurry,bad feet,cropped,poorly drawn hands,poorly drawn face, mutation,deformed, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, extra fingers, fewer digits, extra limbs, extra arms, extra legs, malformed limbs,fused fingers,too many fingers,long neck,cross-eyed,mutated hands,polar lowres,bad body,bad proportions, gross proportions, text, error, missing fingers, missing arms, missing legs, extra digit",
+        "seed": "1025307883",
+        "size": "512x768",
+        "model": "epi_hyperphotogodess",
+        "sampler": "DPM++ 2M Karras",
+        "steps": "30",
+        "cfg_scale": "7",
+        "resources": "",
+        "model_hash": ""
+    }
+]

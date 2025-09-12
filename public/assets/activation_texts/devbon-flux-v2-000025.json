@@ -1,0 +1,8 @@
+{
+    "activation text": "devbon, device bondage",
+    "description": "This LoRA is trained to generate images in the style of device bondage. It includes devices such as fucking machine, vibrator, dildo stick and also pipes, ropes, chains, belts, etc. It works best with models that already have a strong intuition of NSFW content as well as human anatomy.As the data is labeled somewhat detailed, the concept of device bondage can be transfered to other bondage or restraining techniques by restricting the prompt with the desired setting and removing e.g. the dark wood background.Especially the Flux version is very experimental. Please read the verison info.",
+    "sd version": "Other",
+    "modelId": 528877,
+    "sha256": "5A8453BBEBAF6E8E66652AF3A1B15656DD0091096ADC8BD5E9DC125C0123DADD",
+    "modelVersionId": 802040
+}

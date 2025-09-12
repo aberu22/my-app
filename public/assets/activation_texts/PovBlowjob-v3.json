@@ -1,0 +1,7 @@
+{
+    "activation text": "blowjob, deepthroat, pov, side, front, above, creampie, cum, kneeling, runny makeup, hand holding head, hand on penis, arms behind back, wet penis, dry penis, naked male, clothed male",
+    "description": "This LoRA is for creating \"POV\" and \"side view\" blowjob images with cum-in-mouth functionality as well as deepthroats.If you feel like supporting my work, please consider visiting my Patreon to get access to more detailed instructions on how to get the most out of my models and have a say in what's up next: Link https://www.patreon.com/KinkAI/about.Recommended strength: ~0.8Update:Version 3 adds non-POV functionality. Trigger words have changed slightly to accommodate for that:'pov blowjob''pov deepthroat''side blowjob''side deepthroat'These should be self explanatory :)It seems like anatomy has actually improved with this version, which I did not expect.Some triggers only work in either POV or side view.For example, 'Arms behind back' only works in side view.Based on UberRealisticPornMerge.If you like this, you may also like my other LoRAs https://civitai.com/user/KinkAI.",
+    "sd version": "SD1",
+    "modelId": 24001,
+    "sha256": "5CA2BF4D3F7618FEA43F1324D67EF220B07B6CC93D824067AD34ECF439CF9D5C"
+}

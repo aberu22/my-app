@@ -1,0 +1,8 @@
+{
+    "activation text": "looking down, from_below, under, from below, inside_clothes, upshirt, pov, , upshirt, pov, 1boy, from below, under clothes, , from behind, standing, extended upskirt, pov, upshirt, from below",
+    "description": "Another LoRA for a concept that I love, but couldn't be generated well natively in Pony models.Works with most resolutions, but square seems to work really well. Refer to my prompts for the showcase images to get a better idea of what style of prompting works best for this LoRA.Version 2 (Illustrious) Usage Info: Use at 0.8 - 1.0 strength. I have included trigger words that work for various scenarios. To include the hands of the viewer in the image and other compositions, refer to the showcase image prompts.  Version 1 (PONY) Usage Info: Use at 0.9 strength. Highres fix at lower strengths if you want to. Make sure to include the trigger words or you won't get the desired effect. Make sure you add \"naked\" to your prompts, even if you want underwear.Underwear can be prompted for individually, and the LoRA is pretty flexible. Experiment with prompts, because I can only test the LoRA so much on my GTX 1650.In case of any doubts, feel free to ask in DMs or comment.If you want to support more models like this, or you just like what you see: ko-fi (\uff61\u2665\u203f\u2665\uff61) https://ko-fi.com/nottheninjaI'd really appreciate if by any chance you could tip the model.",
+    "sd version": "Other",
+    "modelId": 775379,
+    "sha256": "66B3C0DBD43CB6A80504AD26E45CFF6AEC2D5E6DCCC2A249075DBFAC6529F220",
+    "modelVersionId": 1077941
+}

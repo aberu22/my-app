@@ -1,0 +1,7 @@
+{
+    "activation text": "breast bondage, tied up, bursting",
+    "description": "Realistic (and not) tied up breasts for fun and games.Recommended negative: If you are getting multiple nipples, add pierced nipples to your negativesUpdate:Added a new version where the LORA strength is much more coupled to how strong the tie is, and increasing color responsiveness. Pushing the strength to 1.4-1.6 should now work in most contexts, but be sparing with how many of the trigger word combos you use in a single prompt.Animated models still work well, but pushing up the LORA strength won't really affect color as much Starter Prompts:<subject>, with her breasts tied up <lora:breast_bondage_v2:1.0><subject>, in breast bondage <lora:breast_bondage_v2:1.0><subject>, bursting tied breasts <lora:breast_bondage_v2:1.0>",
+    "sd version": "SD1",
+    "modelId": 103852,
+    "sha256": "822940240A1534A31C8E4EFA47AED01A03D363E4735D91C641E59A3A07DDEC47"
+}

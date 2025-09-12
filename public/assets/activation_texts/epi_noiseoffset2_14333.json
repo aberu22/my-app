@@ -1,0 +1,8 @@
+{
+    "activation text": "",
+    "description": "UPDATE: v2-pynoise released, read the Version changes/notesLORA based on the Noise Offset post https://www.crosslabs.org//blog/diffusion-with-offset-noise for better contrast and darker images.Weighting depends often on Sampler, kept it in the low-middle range (Maybe i will put up a stronger one).Custom weighting is needed sometimes.Works better if u use good keywords like: dark studio, rim lighting, two tone lighting, dimly lit, low key etc.Didn't like the color saturation and image compositions from the theovercomer8sContrastFix_sd15 https://civitai.com/models/8765/theovercomer8s-contrast-fix-sd15sd21-768 so i made this one.UPDATE: v2 is slightly stronger in the whole compositionUpdate 2: added safetensor fileQuick Comparsion",
+    "sd version": "SD1",
+    "modelId": 13941,
+    "sha256": "81680C064E9F50DFCC11EC5E25DA1832F523EC84AFD544F372C7786F3DDCBBAC",
+    "modelVersionId": 16576
+}

@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================
+   Global tokens mapped to your palette
+   (Tailwind config drives these utilities)
+   ======================================== */
+@layer base {
+  :root {
+    /* light scheme (kept for completeness) */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    /* primary = #8b5cf6 (indigo/violet) */
+    --primary: 256 86% 66%;
+    --primary-foreground: 0 0% 100%;
+
+    /* secondary = #27272a */
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* accent = #1e1e21 */
+    --accent: 240 5% 12%;
+    --accent-foreground: 0 0% 100%;
+
+    /* destructive = #ff4da6 */
+    --destructive: 330 100% 65%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* borders/inputs/ring use your tokens */
+    --border: 240 3% 18%;
+    --input: 240 3% 18%;
+    --ring: 256 86% 66%;
+
+    /* charts (rough HSL matches) */
+    --chart-1: 256 86% 66%;  /* #8b5cf6 */
+    --chart-2: 203 100% 74%; /* #79c6ff */
+    --chart-3: 330 100% 65%; /* #ff4da6 */
+    --chart-4: 122 39% 49%;  /* #4CAF50 */
+    --chart-5: 36 100% 50%;  /* #FF9800 */
+
+    --radius: 0.75rem;
+  }
+
+  /* Default to dark UI (your design) */
+  .dark {
+    /* background = #0d0d0d | foreground = #f5f5f5 */
+    --background: 0 0% 5%;
+    --foreground: 0 0% 96%;
+
+    /* card/popover base = #131315 */
+    --card: 240 4% 7%;
+    --card-foreground: 0 0% 96%;
+    --popover: 240 4% 7%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 256 86% 66%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 64%;
+
+    --accent: 240 5% 12%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 330 100% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 3% 16%;
+    --input: 240 3% 16%;
+    --ring: 256 86% 66%;
+
+    --chart-1: 256 86% 66%;
+    --chart-2: 203 100% 74%;
+    --chart-3: 330 100% 65%;
+    --chart-4: 122 39% 49%;
+    --chart-5: 36 100% 50%;
+  }
+
+  /* Base html/body */
+  html {
+    color-scheme: dark;
+    @apply font-sans antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  * {
+    @apply border-border;
+  }
+}
+
+/* ========================================
+   Accessibility & motion
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in, .animate-spin { animation: none !important; }
+}
+
+/* Focus ring helper (uses --ring / tailwind ring token) */
+@layer utilities {
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+}
+
+/* ========================================
+   Polished range inputs (uses primary color)
+   ======================================== */
+.ai-range {
+  height: 1.25rem;
+  background: transparent;
+}
+.ai-range::-webkit-slider-runnable-track {
+  background: rgba(255,255,255,.06);
+  height: .375rem;
+  border-radius: 9999px;
+}
+.ai-range::-moz-range-track {
+  background: rgba(255,255,255,.06);
+  height: .375rem;
+  border-radius: 9999px;
+}
+.ai-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -6px;
+  width: 18px; height: 18px; border-radius: 9999px; background: white;
+  /* glow uses your primary (#8b5cf6) */
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, .35);
+  cursor: pointer; transition: transform .15s ease;
+}
+.ai-range:active::-webkit-slider-thumb { transform: scale(1.06); }
+.ai-range::-moz-range-thumb {
+  width: 18px; height: 18px; border: none; border-radius: 9999px; background: white; cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, .35);
+}
+
+/* ========================================
+   Glassmorphism & surfaces
+   ======================================== */
+.glassmorphism {
+  background: rgba(9, 9, 9, 0.86);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Handy composables that match your tokens */
+@layer components {
+  .surface {
+    @apply bg-card ring-1 ring-border rounded-2xl shadow-inner;
+  }
+  .panel {
+    @apply bg-accent ring-1 ring-border rounded-2xl;
+  }
+  .gradient-cta {
+    /* primary -> info (neonBlue) */
+    background-image: linear-gradient(90deg, hsl(var(--primary)) 0%, #79c6ff 100%);
+    @apply text-white rounded-xl;
+  }
+  .ghost-btn {
+    @apply bg-secondary text-foreground hover:bg-secondary/90 ring-1 ring-border rounded-xl;
+  }
+  .tag {
+    @apply text-[10px] px-2 py-1 rounded-full bg-gradient-to-r from-[#9f6eff] to-[#79c6ff] text-white;
+  }
+}
+
+/* ========================================
+   Typographic niceties
+   ======================================== */
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+}
+
+/* ========================================
+   Optional background “mesh” helper
+   ======================================== */
+.mesh-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .35;
+  mask-image: radial-gradient(60% 60% at 50% 20%, #000 10%, transparent 70%);
+  background:
+    radial-gradient(800px 400px at 10% 0%, #8b5cf6 10%, transparent 40%),
+    radial-gradient(600px 300px at 90% 10%, #79c6ff 10%, transparent 45%),
+    radial-gradient(700px 350px at 50% 10%, #9f6eff 10%, transparent 40%);
+  z-index: -1;
+}

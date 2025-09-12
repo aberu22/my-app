@@ -1,0 +1,7 @@
+{
+    "activation text": "clv_gag",
+    "description": "Made an attempt at cleave gags, they're alright. Separated into two Loras, one for normal and another for knotted. The latter had a much smaller dataset and generally performs worse especially when it comes to texturing the knot, but there's at least a noticeable difference between the two. I tagged them at the same time then trained separately, so they share a trigger word.Trigger Word:clvI removed all \"gag\"-related tags since I figured they'd interfere, but I have found that addingcleave gagactually improves accuracy in some cases, at least when using a bondage model. Give that a try as well if you find it's not being consistent!I also had some instances where it was noticeably difficult to add bindings with some combinations of other Loras and I'm unsure why. Perhaps this is better suited to inpainting? I also found the knotted cleave model to be more overfit than the normal one, so I had to use a smaller CFG to compensate. It also sometimes added animal ears, no clue why.Recommended weight: ~1.0",
+    "sd version": "Other",
+    "modelId": 88408,
+    "sha256": "8DEA3086D1CFE4F96B16C4C5FB1899314392230D2A626E8EF441326FA843D504"
+}

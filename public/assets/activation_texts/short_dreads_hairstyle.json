@@ -1,0 +1,8 @@
+{
+    "activation text": "short_dreads_hairstyle",
+    "description": "PatreonGet early access to build and test build, be able to try all epochs and test them by yourself on Patreon  https://www.patreon.com/betterCuteAsiansor contact me for support on DiscordRecommended settingsMake sure you are aware on the usage instructions of LORASampler: DPM++ SDE Karras (Recommended for best quality, you may try other samplers)CFG Scale : 5 to 10LORA weight for txt2img: reccomended 0.2-0.5.InsutrctionsMy advice is to start with posted images prompts then change them, in any case you will find different keywords for each model (wich should be used with a weight of 1.2-1.3).Also in version description on the right you will find more details about each hairstyle model.Enjoy!If you'd like to support my efforts and have access to early and bleeding edge builds, please think about joining my Patreon: https://www.patreon.com/betterCuteAsians https://www.patreon.com/betterCuteAsians",
+    "sd version": "SD1",
+    "modelId": 76937,
+    "sha256": "9AD55BD84DEF90FAA9A6DEC71F441698F1F9951593914E575D166DC5B9ACBB00",
+    "modelVersionId": 103767
+}

@@ -1,0 +1,7 @@
+{
+    "activation text": "dolphin shorts",
+    "description": " https://patreon.com/psoftSupport my work on Patreon https://www.patreon.com/psoft and Ko-Fi https://ko-fi.com/psoft and get access to tutorials and exclusive models.Rate and leave a like if you enjoyed it, and follow for new models!LoRA trained to generate dolphin shorts in multiple colors.Trigger: dolphin shortsTo select color, use [color] shorts, e.g. pink shorts.Trained colors: black, grey, white, red, green, blue, yellow, pink, purple (some may work better than others due to the amount in the dataset).Optional useful tag: ribbon (can be used in negative prompt as well)",
+    "sd version": "SD1",
+    "modelId": 123226,
+    "sha256": "3F06AD41A499CEE8E4218CFC35EAC919A34B5A8E7C9741861F43B2AE28E4BD37"
+}

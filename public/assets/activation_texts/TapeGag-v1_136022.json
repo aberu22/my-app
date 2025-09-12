@@ -1,0 +1,7 @@
+{
+    "activation text": "tape gag, duct tape, tied",
+    "description": "A LoRA for creating images of tape gagged people.If you feel like supporting my work, please consider visiting my Patreon to get access to more detailed instructions on how to get the most out of my models and have a say in what's up next: Link https://www.patreon.com/KinkAI/about.General trigger word is 'tape gag'.You can also define the color of the tape.A large portion of the dataset contained duct tape, so it responds to that pretty well.It can also depict tied up people, but not very reliably. Use with lower strength for males.Recommended LoRA strength is around 0.6 - 0.8.Based on UberRealisticPornMerge.If you like this you might also like my other LoRAs https://civitai.com/user/KinkAI.",
+    "sd version": "SD1",
+    "modelId": 158277,
+    "sha256": "508D8A7F2AA6B88166DC2CA8A8DCA74F21030F03DB447A07E8B23E65D0602B13"
+}

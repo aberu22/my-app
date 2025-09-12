@@ -1,0 +1,7 @@
+{
+    "activation text": "bondage, bdsm, bound feet, bound toes, tied toes, full body, looking at viewer",
+    "description": "recommended weight 0.4-0.6. hires fix is needed.recommended tags \"full body\", \"looking at viewer\" in the case of it generating legs and feet only. if it still doesn't work, you should use some negative embedding:(you can also use \"bound feet\" and \"bound toes, tied toes\" separately...I guess.you can add tags like \"hogtie\" , \"soles\", \"barefoot\", \"socks\"or others to generate what you want.not stable but it just works:)the published version is epoch21 which is the most stable version I believe, the post images used different versions and may highly picked.\u80fd\u7528\u5c31\u884c",
+    "sd version": "Other",
+    "modelId": 383163,
+    "sha256": "6DB9575216356EAC9D360D383D8461E33F86A397ED29FF7566773DDCB54CCC39"
+}

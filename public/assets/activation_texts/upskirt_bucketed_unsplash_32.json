@@ -1,0 +1,7 @@
+{
+    "activation text": "upskirt",
+    "description": "Note: For best results, use with SDXL Turbo, or better yet TurboVisionXL https://civitai.com/models/215418.Use with keywords: upskirt, then optionally 'vagina out' if you want that, then 'rear shot' or 'front shot' depending on whether you want them shot from the front or rear.Extra keywords like 'lifting up her skirt', 'skirt blowing up in the wind', 'bending over', 'crouching', 'squatting', 'legs up in the air' etc. should also work.Trained on thousands of carefully selected high definition pantyless upskirt images with full detailed captions I wrote systematically but manually.It generalizes surprisingly well, using the body of the subject rather than any specific details from the training dataset.It seems to have learned the actual concept of an upskirt, which is what I was aiming for.I've been sitting on this one since SDXL came out because there were still a lot of bugs I wanted to fix, but for some reason SDXL Turbo fixes them 95% of the time, probably due to turbo's lack of weird anatomy bugs that misalign nudes by default.",
+    "sd version": "SDXL",
+    "modelId": 220231,
+    "sha256": "604E61D0F12EECAB8C47D2E9BAC71F8E50C61B1789AE168E6D9E298CAFA35FC9"
+}

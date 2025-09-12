@@ -1,0 +1,7 @@
+{
+    "activation text": "btlifsk, lifting skirt, lifting dress",
+    "description": "Available for SD1.5, SDXL and Pony! -> check versionIt might be the most effective way to get people's attention.This LoRA is based on a set of 130 photo samples and trained with the PicX real model. It works with front, side and back view as well as standing, kneeling and sitting poses. It can also be used with realistic and non-realistic models.Use a strength between 0.6 and 0.8 for best results. You may also specifiy what's under that skirt, so use \"panties\" or \"no panties\" as additional keywords and don't forget to further specify what you want to be visible...Don't forget to share your images, I'd love to see what you have created. And if you have a few minutes left, make sure to have a look at my other LoRAs. Happy prompting!",
+    "sd version": "Other",
+    "modelId": 359741,
+    "sha256": "7762265F64910E0F9974801A90243085FF8FEF5730036E63C9D8544C79E8BEB6"
+}

@@ -1,0 +1,9 @@
+{
+    "activation text": "from below, low angle shot",
+    "description": "Used to produce low angle upskirt images. Specify between dress or skirt, what type of skirt (ie pleated, pencil, etc). Use CFG between 4 and 7 and clip skip 2.",
+    "sd version": "SDXL",
+    "modelId": 889658,
+    "sha256": "73E5CB2D911F13F4DC76B1491771CEFC3D062B97CBA78DD43640C79529ED0414",
+    "preferred weight": 0,
+    "notes": ""
+}

@@ -1,0 +1,8 @@
+{
+    "activation text": "hand g4g",
+    "description": "A simple Lora meant to add hand gags to a subject. Generally pretty unreliable, but makes some good results possible. Made two versions of the model with different triggers. The first (model A) useshand gaggedand the second one (model B) useshand g4gThe latter is more reliable when the model used actually has a good concept of a gag, since it will otherwise try to insert those rather than a hand gag. Otherwise, model A should work just fine. Recommended weight: 0.8-1.0Potentially useful tags:multiple boys, grabbing from behind, covering mouth, hand over another's mouth",
+    "sd version": "Other",
+    "modelId": 62932,
+    "sha256": "45774E5A5C7E9F5AA78B19F7A8E86D5503B2F8C5854213A0C4E72AADBF1B76E2",
+    "modelVersionId": 67444
+}

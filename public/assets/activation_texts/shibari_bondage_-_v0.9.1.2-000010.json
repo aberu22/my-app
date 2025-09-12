@@ -1,0 +1,8 @@
+{
+    "activation text": "",
+    "description": "My first attempt at a Shibari LoRA. It's not very flexible yet, but maybe I just haven't figured out how to write good prompts for it yet.As always: Please read \"About this version\"There are definitely checkpoints with which the LoRA works better and worse.There is no specific trigger word, but something along the lines of shibari, ropes, tied up etc. is always helpful",
+    "sd version": "SDXL",
+    "modelId": 192732,
+    "sha256": "4CC639D7B1C1F48FF3AACE885B629721A30EF03696D7CD3C892944B51E503D45",
+    "modelVersionId": 216566
+}
