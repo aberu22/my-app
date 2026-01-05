@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import VideoGenerationPanel from "../../components/VideoGenerationPanel";
 import AccentBar from "../../components/AccentBar";
 
@@ -18,7 +19,9 @@ export default function TextToVideoPage() {
       <AccentBar />
 
       <section className="mt-4 rounded-2xl bg-zinc-950 ring-1 ring-white/10 p-4">
-        <VideoGenerationPanel />
+        <Suspense fallback={null}>
+          <VideoGenerationPanel />
+        </Suspense>
       </section>
     </>
   );
