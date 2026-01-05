@@ -1,23 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { fetchLoraTemplates } from "../utils/api";
 
-/**
- * Props:
- * - selected?: Set<string>               // model ids currently selected (multi-select)
- * - onToggleTemplate?: (tpl) => void     // toggles a template in/out of selection
- * - max?: number                         // max selectable (default 3 user LoRAs)
- * - onSelectTemplate?: (tpl) => void     // legacy single-select callback (fallback)
- */
 export default function LoraTemplateGrid({
   selected,
   onToggleTemplate,
-  max = 3,                // ✅ 3 user LoRAs (backend adds 2 base = 5 total)
-  onSelectTemplate,       // legacy
+  max = 3,
+  onSelectTemplate,
+  catalog = "nsfw",
 }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
-  const [legacyIndex, setLegacyIndex] = useState(null); // used only in single-select mode
+  const [legacyIndex, setLegacyIndex] = useState(null);
 
   const isMulti = useMemo(
     () => selected instanceof Set && typeof onToggleTemplate === "function",
@@ -29,7 +23,7 @@ export default function LoraTemplateGrid({
     (async () => {
       try {
         setLoading(true);
-        const data = await fetchLoraTemplates();
+        const data = await fetchLoraTemplates(catalog);
         if (mounted) setTemplates(Array.isArray(data) ? data : []);
       } catch (e) {
         if (mounted) setErr(e?.message || "Failed to load templates");
@@ -37,68 +31,98 @@ export default function LoraTemplateGrid({
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
-  }, []);
+    return () => {
+      mounted = false;
+    };
+  }, [catalog]);
 
-  // Prefer safetensor as the identity (what the backend/front API actually sends),
-  // then fall back to model/lora_name.
   const idOf = (tpl) =>
     String(tpl?.safetensor ?? tpl?.model ?? tpl?.lora_name ?? "").trim();
 
   const labelOf = (tpl) =>
-    String(tpl?.label || "HIGH").toUpperCase(); // default HIGH if not provided
+    String(tpl?.label || "HIGH").toUpperCase();
 
   const selectedCount = isMulti
-    ? (selected?.size ?? 0)
-    : (legacyIndex !== null ? 1 : 0);
+    ? selected?.size ?? 0
+    : legacyIndex !== null
+    ? 1
+    : 0;
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium text-zinc-300">🎨 Select LoRA Templates</h3>
-        {isMulti && (
-          <div className="text-xs text-zinc-400">
-            Selected: <span className="font-semibold text-white">{selectedCount}</span> / {max}
-          </div>
-        )}
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-400">
+          LoRA templates
+        </h3>
+
+        <div className="flex items-center gap-3">
+          <span
+            className={[
+              "rounded-full px-2 py-0.5 text-[10px] ring-1",
+              catalog === "sfw"
+                ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/20"
+                : catalog === "nsfw"
+                ? "bg-rose-500/15 text-rose-300 ring-rose-400/20"
+                : "bg-indigo-500/15 text-indigo-300 ring-indigo-400/20",
+            ].join(" ")}
+          >
+            {catalog.toUpperCase()}
+          </span>
+
+          {isMulti && (
+            <div className="text-[11px] text-zinc-400">
+              Selected{" "}
+              <span className="font-semibold text-zinc-100">
+                {selectedCount}
+              </span>{" "}
+              / {max}
+            </div>
+          )}
+        </div>
       </div>
 
-      {loading && <div className="text-sm text-zinc-400 py-4">Loading templates…</div>}
-      {err && <div className="text-sm text-red-400 py-4">{err}</div>}
+      {loading && (
+        <div className="py-6 text-center text-xs text-zinc-500">
+          Loading templates…
+        </div>
+      )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {err && (
+        <div className="py-4 text-center text-xs text-rose-400">
+          {err}
+        </div>
+      )}
+
+      {/* Grid */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
         {templates.map((template, index) => {
           const model = idOf(template);
           const isSelectable = Boolean(model);
-
-          // Unique-ish key to avoid collisions
-          const baseKey =
-            template.id?.toString().trim() ||
-            model ||
-            [template?.name, template?.trigger].filter(Boolean).join("|").trim() ||
-            "lora";
-          const renderKey = `${baseKey}::${index}`;
-
           const isSelected = isMulti
-            ? (isSelectable && selected?.has(model))
+            ? isSelectable && selected?.has(model)
             : legacyIndex === index;
 
-          // Cap logic: in multi-select, prevent new selections when at max
-          const atMax = isMulti ? ((selected?.size ?? 0) >= max && !isSelected) : false;
+          const atMax =
+            isMulti && (selected?.size ?? 0) >= max && !isSelected;
 
           const handleClick = () => {
-            if (!isSelectable) {
-              console.warn("Ignoring template without a valid model id:", template);
-              return;
-            }
+            if (!isSelectable) return;
 
             if (isMulti) {
-              if (!isSelected && atMax) return; // cap reached
-              // Forward the fields your onGenerateVideo expects
+              if (!isSelected && atMax) return;
               onToggleTemplate?.({
                 ...template,
-                safetensor: template?.safetensor ?? template?.model ?? template?.lora_name ?? "",
-                model: template?.model ?? template?.safetensor ?? template?.lora_name ?? "",
+                safetensor:
+                  template?.safetensor ??
+                  template?.model ??
+                  template?.lora_name ??
+                  "",
+                model:
+                  template?.model ??
+                  template?.safetensor ??
+                  template?.lora_name ??
+                  "",
                 label: labelOf(template),
               });
             } else {
@@ -118,76 +142,88 @@ export default function LoraTemplateGrid({
             }
           };
 
-          const branch = labelOf(template); // HIGH / LOW for badge
+          const branch = labelOf(template);
 
           return (
             <button
-              key={renderKey}
+              key={`${model || "lora"}-${index}`}
               onClick={handleClick}
               disabled={!isSelectable || atMax}
               aria-pressed={isSelected}
-              title={
-                !isSelectable
-                  ? "This template is missing a model id and cannot be selected."
-                  : atMax
-                  ? `You can select up to ${max} user LoRAs`
-                  : isSelected
-                  ? "Selected"
-                  : "Select"
-              }
               className={[
-                "relative flex flex-col items-center p-3 rounded-xl border transition text-center w-full min-w-[160px]",
+                "relative flex flex-col items-center p-3 w-full min-w-[160px]",
+                "rounded-2xl border backdrop-blur-xl transition-all duration-200",
                 isSelected
-                  ? "border-purple-500 text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-indigo-600"
-                  : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700",
-                (!isSelectable || atMax) ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+                  ? "border-white/30 bg-zinc-900/90 shadow-[0_0_0_1px_rgba(255,255,255,0.15)]"
+                  : "border-white/10 bg-zinc-900/60 hover:bg-zinc-900/80",
+                (!isSelectable || atMax)
+                  ? "opacity-50 cursor-not-allowed"
+                  : "cursor-pointer hover:-translate-y-[1px] hover:shadow-[0_12px_48px_rgba(0,0,0,0.6)]",
               ].join(" ")}
             >
-              {/* Selected ribbon */}
+              {/* Selected badge */}
               {isSelected && (
-                <span className="absolute top-2 right-2 text-[10px] px-2 py-1 rounded-full bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 text-white shadow">
+                <span className="absolute right-2 top-2 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-black">
                   Selected
                 </span>
               )}
 
-              {/* Branch badge (HIGH/LOW) */}
-              <span className="absolute top-2 left-2 text-[10px] px-2 py-1 rounded-full bg-white/10 ring-1 ring-white/15">
+              {/* HIGH / LOW badge */}
+              <span className="absolute left-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-zinc-300 ring-1 ring-white/10">
                 {branch}
               </span>
+
+              {/* Catalog badge (optional) */}
+              {template?.catalog && (
+                <span
+                  className={[
+                    "absolute left-16 top-2 rounded-full px-2 py-0.5 text-[10px] ring-1",
+                    template.catalog === "sfw"
+                      ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/20"
+                      : template.catalog === "nsfw"
+                      ? "bg-rose-500/15 text-rose-300 ring-rose-400/20"
+                      : "bg-indigo-500/15 text-indigo-300 ring-indigo-400/20",
+                  ].join(" ")}
+                >
+                  {template.catalog.toUpperCase()}
+                </span>
+              )}
 
               {/* Thumbnail */}
               {template?.thumbnail ? (
                 <img
                   src={template.thumbnail}
                   alt={template?.name || model || "LoRA"}
-                  className="w-[240px] h-80 object-cover rounded mb-2 border border-white/10"
+                  className="mb-2 h-80 w-[240px] rounded-xl border border-white/10 object-cover shadow-inner"
                 />
               ) : (
-                <div className="w-[240px] h-80 rounded mb-2 bg-zinc-900 border border-zinc-700" />
+                <div className="mb-2 h-80 w-[240px] rounded-xl border border-white/10 bg-zinc-950" />
               )}
 
               {/* Name */}
-              <span className="text-sm text-white font-medium whitespace-normal break-words leading-snug">
+              <span className="text-sm font-medium text-zinc-100 leading-snug text-center">
                 {template?.name || model || "LoRA"}
               </span>
 
               {/* Trigger */}
               {template?.trigger ? (
-                <span className="text-xs text-purple-200/90 italic mt-1">
-                  Trigger: "{template.trigger}"
+                <span className="mt-1 text-xs italic text-zinc-400">
+                  Trigger: “{template.trigger}”
                 </span>
               ) : (
-                <span className="text-xs text-zinc-300/60 italic mt-1">No trigger</span>
+                <span className="mt-1 text-xs italic text-zinc-500">
+                  No trigger
+                </span>
               )}
             </button>
           );
         })}
       </div>
 
-      {/* Helper hint when capped */}
+      {/* Cap hint */}
       {isMulti && (selected?.size ?? 0) >= max && (
-        <div className="mt-3 text-xs text-zinc-400">
-          You’ve selected {max}. Click a selected card to <strong>deselect</strong> it.
+        <div className="mt-4 text-center text-xs text-zinc-400">
+          You’ve selected {max}. Click a selected card to deselect it.
         </div>
       )}
     </div>

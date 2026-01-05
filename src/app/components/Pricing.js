@@ -1,183 +1,281 @@
 "use client";
 
-import { useState } from "react";
-import { usePlanStatus } from "@/app/hooks/usePlanStatus";
+import { useMemo, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
+import { usePlanStatus } from "@/app/hooks/usePlanStatus";
 import BuyCredits from "./BuyCredits";
+import toast from "react-hot-toast";
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
-const Pricing = () => {
+const stripePromise = loadStripe(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+);
+
+export default function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [activeTab, setActiveTab] = useState("subscriptions");
 
-  const { user, plan: currentPlan, priceId, stripeSubscriptionId } = usePlanStatus();
+  const { user, plan: currentPlan, stripeSubscriptionId } = usePlanStatus();
 
-  const handleSubscribe = async (plan) => {
-    if (loadingPlan || !user) return;
-    setLoadingPlan(plan);
+  /* ---------------------------------------------
+     Stripe price IDs (PUBLIC, client-safe)
+  --------------------------------------------- */
+  const PLAN_PRICE_IDS = useMemo(
+    () => ({
+      creator: process.env.NEXT_PUBLIC_STRIPE_SUB_CREATOR,
+      visionary: process.env.NEXT_PUBLIC_STRIPE_SUB_VISIONARY,
+      pro: process.env.NEXT_PUBLIC_STRIPE_SUB_PRO,
+    }),
+    []
+  );
 
-    try {
-      const planPriceMap = {
-        basic: "price_1RCB4bGbLZ3kl4Qnbd6PlZeX",
-        plus: "price_1RCBBoGbLZ3kl4Qnywms6TCs",
-      };
+  const normalize = (p) => String(p || "").toLowerCase();
+  const isCurrentPlan = (p) => normalize(currentPlan) === normalize(p);
 
-      const newPriceId = planPriceMap[plan];
-      if (!newPriceId) throw new Error("Invalid plan selected");
-
-      if (stripeSubscriptionId) {
-        // Already subscribed → Upgrade
-        const upgradeRes = await fetch("/api/change-subscription", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.uid, newPriceId }),
-        });
-
-        if (!upgradeRes.ok) {
-          const err = await upgradeRes.json();
-          throw new Error(err.error || "Subscription upgrade failed.");
-        }
-
-        alert("✅ Your subscription was updated successfully.");
-      } else {
-        // First time subscription → Checkout
-        const checkoutRes = await fetch("/api/checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan, email: user.email, userId: user.uid }),
-        });
-
-        const { sessionId } = await checkoutRes.json();
-        if (!sessionId) throw new Error("Stripe session could not be created.");
-
-        const stripe = await stripePromise;
-        await stripe.redirectToCheckout({ sessionId });
-      }
-    } catch (error) {
-      console.error("🚨 Subscription Error:", error.message);
-      alert(error.message || "Something went wrong while processing your subscription.");
-    } finally {
-      setLoadingPlan(null);
+  /* ---------------------------------------------
+     Guard: require login
+  --------------------------------------------- */
+  const requireAuth = () => {
+    if (!user?.uid) {
+      toast("Please log in to continue.");
+      return false;
     }
+    return true;
   };
 
-  const renderButton = (plan) => {
-    if (currentPlan === plan) {
+  /* ---------------------------------------------
+     Subscribe / Upgrade handler
+  --------------------------------------------- */
+ async function handleSubscribe(planKey) {
+  const plan = normalize(planKey);
+  if (loadingPlan) return;
+  if (!requireAuth()) return;
+
+  // Explorer (free) has no Stripe action
+  if (plan === "free") return;
+
+  const priceId = PLAN_PRICE_IDS[plan];
+  if (!priceId) {
+    alert("Pricing configuration error. Please contact support.");
+    return;
+  }
+
+  setLoadingPlan(plan);
+
+  try {
+    // 1️⃣ ALWAYS try checkout first (Stripe = source of truth)
+    const checkoutRes = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan,
+        email: user.email,
+        userId: user.uid,
+      }),
+    });
+
+    // 2️⃣ Stripe says subscription already exists → upgrade/downgrade
+    if (checkoutRes.status === 409) {
+      const upgradeRes = await fetch("/api/change-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.uid,
+          newPriceId: priceId,
+        }),
+      });
+
+      const upgradeData = await upgradeRes.json();
+      if (!upgradeRes.ok) {
+        throw new Error(upgradeData?.error || "Plan change failed");
+      }
+
+      toast.success(
+      upgradeData.direction === "upgrade"
+    ? "Plan upgraded successfully 🎉"
+    : "Downgrade scheduled for next billing cycle ✅"
+      );
+
+      return;
+    }
+
+    // 3️⃣ Normal checkout success
+    const data = await checkoutRes.json();
+    if (!checkoutRes.ok) {
+      throw new Error(data?.error || "Checkout failed");
+    }
+
+    if (data?.url) {
+      window.location.href = data.url;
+      return;
+    }
+
+    if (data?.sessionId) {
+      const stripe = await stripePromise;
+      await stripe.redirectToCheckout({ sessionId: data.sessionId });
+      return;
+    }
+
+    throw new Error("Checkout session created but no redirect info.");
+  } catch (err) {
+    console.error(err);
+    toast.error(err.message || "Something went wrong.");
+  } finally {
+    setLoadingPlan(null);
+  }
+}
+
+
+  /* ---------------------------------------------
+     Reusable button
+  --------------------------------------------- */
+  const ActionButton = ({ plan, label, highlight }) => {
+    if (isCurrentPlan(plan)) {
       return (
-        <button className="mt-4 w-full bg-gray-700 text-white py-2 rounded-lg cursor-default">
+        <button className="w-full mt-6 py-2 rounded-md bg-zinc-800 text-zinc-400 text-xs cursor-default">
           Current Plan
         </button>
       );
     }
+
     return (
       <button
         onClick={() => handleSubscribe(plan)}
         disabled={loadingPlan !== null}
-        className={`mt-4 w-full py-2 rounded-lg transition font-semibold tracking-wide shadow-md hover:scale-[1.01] duration-200 ${
-          plan === "basic"
-            ? "bg-gradient-to-r from-green-400 to-green-600 text-white"
-            : plan === "plus"
-            ? "bg-gradient-to-r from-yellow-400 to-yellow-500 text-black"
-            : "bg-gradient-to-r from-purple-500 to-pink-600 text-white"
+        className={`w-full mt-6 py-2 rounded-md text-xs font-medium transition disabled:opacity-60 ${
+          highlight
+            ? "bg-white text-black hover:bg-zinc-200"
+            : "bg-zinc-100 text-black hover:bg-white"
         }`}
       >
-        {loadingPlan === plan ? "Switching..." : `Subscribe to ${plan.charAt(0).toUpperCase() + plan.slice(1)}`}
+        {loadingPlan === plan ? "Processing…" : label}
       </button>
     );
   };
 
   return (
-    <div className="flex flex-col items-center bg-gradient-to-b from-zinc-950 to-zinc-900 text-white py-12 px-4 min-h-screen">
-      <h2 className="text-5xl font-extrabold mb-10 text-center bg-gradient-to-r from-purple-400 to-blue-400 text-transparent bg-clip-text">
-        Choose Your Plan
-      </h2>
-
-      <div className="flex space-x-4 mb-10">
-        <button
-          onClick={() => setActiveTab("subscriptions")}
-          className={`px-6 py-2 rounded-full font-semibold text-sm shadow-md ${
-            activeTab === "subscriptions"
-              ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white"
-              : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-          }`}
-        >
-          Subscriptions
-        </button>
-        <button
-          onClick={() => setActiveTab("credits")}
-          className={`px-6 py-2 rounded-full font-semibold text-sm shadow-md ${
-            activeTab === "credits"
-              ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white"
-              : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-          }`}
-        >
-          Buy Credits
-        </button>
+    <div className="min-h-screen bg-black text-zinc-200 px-6 py-20">
+      {/* HEADER */}
+      <div className="max-w-5xl mx-auto text-center mb-14">
+        <h1 className="text-3xl font-semibold text-white">
+          FantasyVisionAI Pricing
+        </h1>
+        <p className="mt-3 text-sm text-zinc-400 max-w-2xl mx-auto">
+          Cinematic AI image & video generation powered by premium models.
+          Start free. Upgrade when you’re ready.
+        </p>
+        <p className="mt-2 text-xs text-zinc-500">
+          Switch plans anytime — you’ll never be charged twice.
+        </p>
       </div>
 
+      {/* TABS */}
+      <div className="flex justify-center mb-12">
+        <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-full p-1">
+          {["subscriptions", "credits"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-1.5 rounded-full text-xs transition ${
+                activeTab === tab
+                  ? "bg-white text-black"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {tab === "subscriptions" ? "Subscriptions" : "Buy Credits"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* SUBSCRIPTIONS */}
       {activeTab === "subscriptions" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl">
-          <div className="bg-zinc-900 rounded-2xl border border-gray-800 p-6 shadow-lg">
-            <h3 className="text-2xl font-bold text-white">Free</h3>
-            <p className="text-lg text-gray-400 mb-4">$0/month</p>
-            <ul className="text-sm text-gray-400 space-y-2 mb-6">
-              <li>✅ Free 4 credits</li>
-              <li>✅ Professional 4k images</li>
-              <li>✅ 5-second video generation</li>
-              <li>❌ No access to realistic or anime models</li>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Explorer */}
+          <div className="rounded-xl p-6 bg-zinc-950 border border-zinc-800 flex flex-col">
+            <h3 className="text-lg font-medium text-white">Explorer</h3>
+            <p className="text-sm text-zinc-400 mt-1">$0 / month</p>
+
+            <ul className="mt-6 text-xs text-zinc-400 space-y-2">
+              <li><strong className="text-white">50 free credits</strong></li>
+              <li>High-quality image generation</li>
+              <li>Basic tools & community workflows</li>
+              <li className="text-zinc-500">No premium video models</li>
             </ul>
-            <button className="w-full bg-gray-700 text-white py-2 rounded-lg cursor-default">Current Plan</button>
+
+            <div className="mt-auto">
+              <ActionButton plan="free" label="Stay on Explorer" />
+            </div>
           </div>
 
-          <div className="bg-zinc-900 rounded-2xl border border-green-600 p-6 shadow-lg">
-            <h3 className="text-2xl font-bold text-green-400">Basic</h3>
-            <p className="text-lg text-green-400 mb-4">$5.99/month</p>
-            <ul className="text-sm text-gray-400 space-y-2 mb-6">
-              <li>✅ 600 credits per Month</li>
-              <li>✅ Professional 4K images</li>
-              <li>✅ Watermark Removal</li>
-              <li>✅ 5-second video generation</li>
-              <li>✅ Image upscaling</li>
-              <li>✅ Unlocking Realistic 4K models</li>
-              <li>❌ No access to Anime models or Stable Diffusion XL</li>
+          {/* Creator */}
+          <div className="rounded-xl p-6 bg-zinc-950 border border-zinc-800 flex flex-col">
+            <h3 className="text-lg font-medium text-white">Creator</h3>
+            <p className="text-sm text-zinc-400 mt-1">$12 / month</p>
+
+            <ul className="mt-6 text-xs text-zinc-400 space-y-2">
+              <li><strong className="text-white">800 credits / month</strong></li>
+              <li>Perfect for experimenting & casual creation</li>
+              <li>Images + occasional video</li>
+              <li className="text-zinc-500">~3–6 short videos / month</li>
             </ul>
-            {renderButton("basic")}
+
+            <ActionButton plan="creator" label="Upgrade to Creator" />
           </div>
 
-          <div className="relative bg-zinc-900 rounded-2xl border border-yellow-500 p-6 shadow-xl">
-            <span className="absolute top-3 right-3 bg-yellow-500 text-black px-3 py-1 text-xs font-bold rounded-full shadow-md">
-              Best Choice
+          {/* Visionary */}
+          <div className="relative rounded-xl p-6 bg-zinc-950 border border-zinc-700 flex flex-col">
+            <span className="absolute -top-3 right-4 text-[10px] px-2 py-0.5 rounded-full bg-white text-black">
+              Recommended
             </span>
-            <h3 className="text-2xl font-bold text-yellow-400">Plus</h3>
-            <p className="text-lg text-yellow-400 mb-4">$19.99/month</p>
-            <ul className="text-sm text-gray-400 space-y-2 mb-6">
-              <li>✅ 3,000 monthly credits</li>
-              <li>✅ Professional 4K & 8K images</li>
-              <li>✅ Stable Diffusion XL Access</li>
-              <li>✅ Unlimited relaxed generations</li>
-              <li>✅ Free daily credits</li>
-              <li>✅ Up to 4 tasks in queue</li>
-              <li>✅ Up to 4 images per generation</li>
-              <li>✅ 10-second video generation</li>
-              <li>✅ Watermark-free download</li>
-              <li>✅ Access to all AI tools</li>
-              <li>✅ Unlocking All Anime models</li>
-              <li>✅ Image upscaling</li>
-              <li>✅ **NSFW / Uncensored Generations**</li>
+
+            <h3 className="text-lg font-medium text-white">Visionary</h3>
+            <p className="text-sm text-zinc-400 mt-1">$29 / month</p>
+
+            <ul className="mt-6 text-xs text-zinc-400 space-y-2">
+              <li><strong className="text-white">3,000 credits / month</strong></li>
+              <li>Best for frequent video creators</li>
+              <li>Premium models: Seedance + Wan</li>
+              <li className="text-zinc-500">~10–20 videos / month</li>
             </ul>
-            {renderButton("plus")}
+
+            <ActionButton
+              plan="visionary"
+              label="Become a Visionary"
+              highlight
+            />
+          </div>
+
+          {/* Pro */}
+          <div className="rounded-xl p-6 bg-zinc-950 border border-zinc-700 flex flex-col">
+            <h3 className="text-lg font-medium text-white">Pro</h3>
+            <p className="text-sm text-zinc-400 mt-1">$59 / month</p>
+
+            <ul className="mt-6 text-xs text-zinc-400 space-y-2">
+              <li><strong className="text-white">8,000 credits / month</strong></li>
+              <li>For power users & agencies</li>
+              <li>Best value per credit</li>
+              <li className="text-zinc-500">~30–50 videos / month</li>
+            </ul>
+
+            <ActionButton plan="pro" label="Go Pro" />
           </div>
         </div>
       )}
 
-      {activeTab === "credits" && <BuyCredits />}
+      {/* BUY CREDITS */}
+      {activeTab === "credits" && (
+        <div className="max-w-4xl mx-auto">
+          <BuyCredits />
+        </div>
+      )}
 
-      <p className="text-zinc-500 text-sm mt-8 max-w-xl text-center">
-        Your subscription plan will take effect in the next billing period. Enjoy your current plan benefits until then.
-      </p>
+      {/* FOOTER TRUST */}
+      <div className="mt-16 text-center text-xs text-zinc-500 max-w-xl mx-auto">
+        Subscriptions renew automatically. Cancel anytime.
+        <br />
+        Plan changes apply instantly — no double charges, ever.
+      </div>
     </div>
   );
-};
-
-export default Pricing;
+}

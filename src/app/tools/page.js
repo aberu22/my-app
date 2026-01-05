@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { Sora } from "next/font/google";
 import {
   fetchModels,
   fetchLoras,
@@ -8,14 +9,19 @@ import {
   setOptions,
 } from "../utils/api";
 
+
+import CreateSidebar from "../components/CreateSidebar";
+
 /**
- * Refactor goals (no backend delete API):
- *  - Removed nonexistent deleteImage/fetchGeneratedImages imports and usage
- *  - History is kept in localStorage; delete only affects local state/storage
- *  - Fixed Promise.all destructuring bug
- *  - Added helpers for history + prompt history + safe ID generation
- *  - Minor UX: confirm delete, clear all, defensive guards
+ * Sora Theme & Layout Notes
+ * - Typography: Sora (variable) applied globally to the component
+ * - Palette: sky/indigo/fuchsia accents, soft glass surfaces, subtle grid backdrop
+ * - Layout: sticky controls panel on the left, responsive gallery on the right
+ * - Components: compact tab buttons, elevated cards, consistent radius (2xl), subtle rings
+ * - Functionality: identical to your original; only styling & layout improved
  */
+
+const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["300","400","500","600","700"] });
 
 // ---------------------- Constants ----------------------
 const STYLE_PRESETS = [
@@ -99,10 +105,10 @@ const STYLE_PRESETS = [
 
 const RATIOS = [
   { id: "1:1", w: 768, h: 768, icon: "⬜" },
-  { id: "4:5", w: 768, h: 960, icon: "🟪" }, // Instagram Portrait (safe multiples of 64)
+  { id: "4:5", w: 768, h: 960, icon: "🟪" },
   { id: "3:4", w: 768, h: 1024, icon: "📱" },
   { id: "4:3", w: 1024, h: 768, icon: "📺" },
-  { id: "9:16", w: 832, h: 1472, icon: "📱" }, // Stories/Reels
+  { id: "9:16", w: 832, h: 1472, icon: "📱" },
   { id: "16:9", w: 1472, h: 832, icon: "📺" },
 ];
 
@@ -149,6 +155,34 @@ function savePromptHistory(list) {
 function makeId(i = 0) {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}_${Math.random().toString(36).slice(2)}_${i}`;
+}
+
+// ---------------------- UI Helpers (tiny components) ----------------------
+function TabButton({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-xl px-4 py-2 font-medium transition-colors ${
+        active
+          ? "bg-sky-600 text-white shadow-[0_0_0_1px_rgba(56,189,248,.35)]"
+          : "bg-neutral-800/80 hover:bg-neutral-700 text-neutral-100"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SectionCard({ title, action, children }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-neutral-900/40 backdrop-blur-sm p-5 shadow-[inset_0_1px_0_rgba(255,255,255,.06)]">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold tracking-tight text-white/90">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export default function AiInfluencerStudio() {
@@ -389,38 +423,41 @@ export default function AiInfluencerStudio() {
   }, []);
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-neutral-950 text-neutral-100">
-      <div className="mx-auto max-w-7xl px-4 py-10">
+    <div className={`${sora.className} min-h-[100dvh] text-neutral-100 bg-[#07080c] relative overflow-hidden`}>
+      {/* Sora background grid + glow */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,.08),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(217,70,239,.06),transparent_60%)]" />
+        <div className="absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]">
+          <svg className="h-full w-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="0.5" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+          </svg>
+        </div>
+      </div>
+
+      <CreateSidebar/>
+
+      <div className="mx-auto max-w-7xl px-4 py-8 relative">
+        {/* Header */}
         <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent">
-              AI Influencer Studio
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+              <span className="bg-gradient-to-r from-sky-400 via-indigo-400 to-fuchsia-400 bg-clip-text text-transparent">AI Influencer Studio</span>
             </h1>
-            <p className="mt-2 text-sm text-neutral-400">
-              Create stunning AI influencer portraits with fine-grained control
-            </p>
+            <p className="mt-2 text-sm text-white/60">Create stunning AI influencer portraits with fine‑grained control</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setActiveTab("generate")}
-              className={`rounded-xl px-4 py-2 font-medium ${
-                activeTab === "generate" ? "bg-indigo-600" : "bg-neutral-800 hover:bg-neutral-700"
-              }`}
-            >
-              Generate
-            </button>
-            <button
-              onClick={() => setActiveTab("history")}
-              className={`rounded-xl px-4 py-2 font-medium ${
-                activeTab === "history" ? "bg-indigo-600" : "bg-neutral-800 hover:bg-neutral-700"
-              }`}
-            >
-              History
-            </button>
+            <TabButton active={activeTab === "generate"} onClick={() => setActiveTab("generate")}>Generate</TabButton>
+            <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>History</TabButton>
             <button
               onClick={onGenerate}
               disabled={isLoading}
-              className="rounded-xl border border-indigo-500 bg-indigo-600 px-4 py-2 font-medium hover:bg-indigo-500 disabled:opacity-60"
+              className="rounded-xl border border-sky-500/50 bg-sky-600 px-4 py-2 font-semibold hover:bg-sky-500 disabled:opacity-60 shadow-[0_0_0_1px_rgba(56,189,248,.25)]"
             >
               {isLoading ? "Generating…" : "Generate"}
             </button>
@@ -428,22 +465,22 @@ export default function AiInfluencerStudio() {
         </header>
 
         {activeTab === "generate" ? (
-          <div className="grid gap-6 lg:grid-cols-[440px,1fr]">
+          <div className="grid gap-6 lg:grid-cols-[420px,1fr]">
             {/* Controls */}
-            <form onSubmit={onGenerate} className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-5">
+            <form onSubmit={onGenerate} className="lg:sticky lg:top-4 rounded-2xl border border-white/10 bg-neutral-900/50 backdrop-blur-sm p-5 shadow-[inset_0_1px_0_rgba(255,255,255,.06)]">
               {/* Prompt */}
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Prompt</label>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-white/80">Prompt</label>
                 <button
                   type="button"
                   onClick={applyPromptTemplate}
-                  className="text-xs text-indigo-400 hover:text-indigo-300"
+                  className="text-xs text-sky-300 hover:text-sky-200"
                 >
                   Random template
                 </button>
               </div>
               <textarea
-                className="mt-2 w-full text-black rounded-xl border border-neutral-800 bg-neutral-900 p-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950/60 p-3 outline-none focus:ring-2 focus:ring-sky-500/60"
                 rows={4}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -452,17 +489,17 @@ export default function AiInfluencerStudio() {
 
               {promptHistory.length > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs text-neutral-500 mb-1">Recent prompts:</p>
+                  <p className="mb-1 text-xs text-white/40">Recent prompts:</p>
                   <div className="flex flex-wrap gap-1">
                     {promptHistory.slice(0, 3).map((p, i) => (
                       <button
                         key={i}
                         type="button"
                         onClick={() => setPrompt(p)}
-                        className="text-xs bg-neutral-800 hover:bg-neutral-700 rounded-lg px-2 py-1 truncate max-w-[140px]"
+                        className="text-xs bg-neutral-800/80 hover:bg-neutral-700 rounded-lg px-2 py-1 truncate max-w-[160px] ring-1 ring-white/5"
                         title={p}
                       >
-                        {p.substring(0, 20)}...
+                        {p.substring(0, 24)}...
                       </button>
                     ))}
                   </div>
@@ -471,9 +508,9 @@ export default function AiInfluencerStudio() {
 
               {/* Negative */}
               <div className="mt-4">
-                <label className="block text-sm font-medium">Negative prompt</label>
+                <label className="block text-sm font-medium text-white/80">Negative prompt</label>
                 <input
-                  className="mt-2 w-full text-black rounded-xl border border-neutral-800 bg-neutral-900 p-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950/60 p-3 outline-none focus:ring-2 focus:ring-sky-500/60"
                   value={negative}
                   onChange={(e) => setNegative(e.target.value)}
                 />
@@ -482,17 +519,17 @@ export default function AiInfluencerStudio() {
               {/* Style + Ratio */}
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium">Style preset</label>
+                  <label className="block text-sm font-medium text-white/80">Style preset</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {STYLE_PRESETS.map((s) => (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => { setStyleId(s.id); if (s.suggestedRatio) setRatio(s.suggestedRatio); }}
-                        className={`flex items-center gap-1 rounded-xl border px-3 py-2 text-sm ${
+                        className={`flex items-center gap-1 rounded-xl border px-3 py-2 text-sm transition-colors ${
                           styleId === s.id
-                            ? "border-indigo-500 bg-indigo-500/10"
-                            : "border-neutral-800 bg-neutral-900 hover:bg-neutral-800"
+                            ? "border-sky-500/50 bg-sky-500/10 shadow-[0_0_0_1px_rgba(56,189,248,.25)]"
+                            : "border-white/10 bg-neutral-950/50 hover:bg-neutral-900"
                         }`}
                       >
                         <span>{s.icon}</span>
@@ -503,17 +540,17 @@ export default function AiInfluencerStudio() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium">Aspect ratio</label>
+                  <label className="block text-sm font-medium text-white/80">Aspect ratio</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {RATIOS.map((r) => (
                       <button
                         key={r.id}
                         type="button"
                         onClick={() => setRatio(r.id)}
-                        className={`flex items-center gap-1 rounded-xl border px-3 py-2 text-sm ${
+                        className={`flex items-center gap-1 rounded-xl border px-3 py-2 text-sm transition-colors ${
                           ratio === r.id
-                            ? "border-indigo-500 bg-indigo-500/10"
-                            : "border-neutral-800 bg-neutral-900 hover:bg-neutral-800"
+                            ? "border-fuchsia-500/40 bg-fuchsia-500/10 shadow-[0_0_0_1px_rgba(217,70,239,.25)]"
+                            : "border-white/10 bg-neutral-950/50 hover:bg-neutral-900"
                         }`}
                       >
                         <span>{r.icon}</span>
@@ -527,9 +564,9 @@ export default function AiInfluencerStudio() {
               {/* Model + Sampler */}
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium">Model</label>
+                  <label className="block text-sm font-medium text-white/80">Model</label>
                   <select
-                    className="mt-2 w-full text-black rounded-xl border border-neutral-800 bg-neutral-900 p-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950/60 p-3 outline-none focus:ring-2 focus:ring-sky-500/60"
                     value={selectedModel?.title || selectedModel?.name || ""}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -545,9 +582,9 @@ export default function AiInfluencerStudio() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Sampler</label>
+                  <label className="block text-sm font-medium text-white/80">Sampler</label>
                   <select
-                    className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-900 p-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950/60 p-3 outline-none focus:ring-2 focus:ring-sky-500/60"
                     value={sampler}
                     onChange={(e) => setSampler(e.target.value)}
                   >
@@ -566,7 +603,7 @@ export default function AiInfluencerStudio() {
               {/* Steps / CFG */}
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium">Steps: {steps}</label>
+                  <label className="block text-sm font-medium text-white/80">Steps: {steps}</label>
                   <input
                     type="range"
                     min="10"
@@ -574,11 +611,11 @@ export default function AiInfluencerStudio() {
                     step="1"
                     value={steps}
                     onChange={(e) => setSteps(Number(e.target.value))}
-                    className="mt-2 w-full"
+                    className="mt-2 w-full accent-sky-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">CFG: {cfg}</label>
+                  <label className="block text-sm font-medium text-white/80">CFG: {cfg}</label>
                   <input
                     type="range"
                     min="1"
@@ -586,7 +623,7 @@ export default function AiInfluencerStudio() {
                     step="0.5"
                     value={cfg}
                     onChange={(e) => setCfg(Number(e.target.value))}
-                    className="mt-2 w-full"
+                    className="mt-2 w-full accent-fuchsia-500"
                   />
                 </div>
               </div>
@@ -594,21 +631,21 @@ export default function AiInfluencerStudio() {
               {/* Batch & Seed */}
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium">Images</label>
+                  <label className="block text-sm font-medium text-white/80">Images</label>
                   <input
                     type="number"
                     min="1"
                     max="6"
-                    className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-900 p-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950/60 p-3 outline-none focus:ring-2 focus:ring-sky-500/60"
                     value={count}
                     onChange={(e) => setCount(Number(e.target.value))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Seed</label>
+                  <label className="block text-sm font-medium text-white/80">Seed</label>
                   <input
                     placeholder="blank = random"
-                    className="mt-2 w-full rounded-xl border border-neutral-800 bg-neutral-900 p-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950/60 p-3 outline-none focus:ring-2 focus:ring-sky-500/60"
                     value={seed}
                     onChange={(e) => setSeed(e.target.value)}
                   />
@@ -620,15 +657,15 @@ export default function AiInfluencerStudio() {
                 <button
                   type="button"
                   onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center text-sm text-indigo-400 hover:text-indigo-300"
+                  className="flex items-center text-sm text-sky-300 hover:text-sky-200"
                 >
                   {showAdvanced ? "▼" : "►"} Advanced Options
                 </button>
 
                 {showAdvanced && (
-                  <div className="mt-2 space-y-3 p-3 rounded-xl bg-neutral-800/50">
+                  <div className="mt-2 space-y-3 p-3 rounded-xl bg-neutral-950/40 ring-1 ring-white/10">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm">Restore Faces</label>
+                      <label className="text-sm text-white/80">Restore Faces</label>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
@@ -636,12 +673,12 @@ export default function AiInfluencerStudio() {
                           onChange={() => setRestoreFaces(!restoreFaces)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-neutral-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        <div className="w-11 h-6 bg-neutral-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
                       </label>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <label className="text-sm">High Resolution</label>
+                      <label className="text-sm text-white/80">High Resolution</label>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
@@ -649,14 +686,14 @@ export default function AiInfluencerStudio() {
                           onChange={() => setHighRes(!highRes)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-neutral-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        <div className="w-11 h-6 bg-neutral-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"></div>
                       </label>
                     </div>
 
                     {highRes && (
                       <>
                         <div>
-                          <label className="block text-sm">High Res Scale: {hrScale}</label>
+                          <label className="block text-sm text-white/80">High Res Scale: {hrScale}</label>
                           <input
                             type="range"
                             min="1.5"
@@ -664,11 +701,11 @@ export default function AiInfluencerStudio() {
                             step="0.1"
                             value={hrScale}
                             onChange={(e) => setHrScale(Number(e.target.value))}
-                            className="w-full"
+                            className="w-full accent-sky-500"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm">High Res Steps: {hrSteps}</label>
+                          <label className="block text-sm text-white/80">High Res Steps: {hrSteps}</label>
                           <input
                             type="range"
                             min="5"
@@ -676,7 +713,7 @@ export default function AiInfluencerStudio() {
                             step="1"
                             value={hrSteps}
                             onChange={(e) => setHrSteps(Number(e.target.value))}
-                            className="w-full"
+                            className="w-full accent-fuchsia-500"
                           />
                         </div>
                       </>
@@ -687,8 +724,8 @@ export default function AiInfluencerStudio() {
 
               {/* LoRAs */}
               <div className="mt-6">
-                <label className="block text-sm font-medium">LoRAs</label>
-                <div className="mt-2 grid max-h-48 grid-cols-2 gap-2 overflow-auto rounded-xl border border-neutral-800 p-2">
+                <label className="block text-sm font-medium text-white/80">LoRAs</label>
+                <div className="mt-2 grid max-h-48 grid-cols-2 gap-2 overflow-auto rounded-xl border border-white/10 p-2 bg-neutral-950/40">
                   {loras.map((l) => {
                     const name = l.alias || l.name;
                     const active = selectedLoras.some((x) => x.name === name);
@@ -697,10 +734,10 @@ export default function AiInfluencerStudio() {
                         type="button"
                         key={name}
                         onClick={() => toggleLora(l)}
-                        className={`truncate rounded-lg border px-2 py-2 text-left text-sm ${
+                        className={`truncate rounded-lg border px-2 py-2 text-left text-sm transition-colors ${
                           active
-                            ? "border-indigo-500 bg-indigo-500/10"
-                            : "border-neutral-800 bg-neutral-900 hover:bg-neutral-800"
+                            ? "border-sky-500/50 bg-sky-500/10 shadow-[0_0_0_1px_rgba(56,189,248,.25)]"
+                            : "border-white/10 bg-neutral-950/50 hover:bg-neutral-900"
                         }`}
                         title={name}
                       >
@@ -715,9 +752,9 @@ export default function AiInfluencerStudio() {
                     {selectedLoras.map((x) => (
                       <div
                         key={x.name}
-                        className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-3"
+                        className="flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-950/60 p-3"
                       >
-                        <span className="w-40 truncate text-sm">{x.name}</span>
+                        <span className="w-40 truncate text-sm text-white/80">{x.name}</span>
                         <input
                           type="range"
                           min="0"
@@ -725,13 +762,13 @@ export default function AiInfluencerStudio() {
                           step="0.05"
                           value={x.weight}
                           onChange={(e) => setLoraWeight(x.name, Number(e.target.value))}
-                          className="flex-1"
+                          className="flex-1 accent-sky-500"
                         />
-                        <span className="w-12 text-right text-sm">{x.weight.toFixed(2)}</span>
+                        <span className="w-12 text-right text-sm text-white/70">{x.weight.toFixed(2)}</span>
                         <button
                           type="button"
                           onClick={() => setSelectedLoras((prev) => prev.filter((l) => l.name !== x.name))}
-                          className="rounded-lg border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                          className="rounded-lg border border-white/10 px-2 py-1 text-xs hover:bg-neutral-900"
                         >
                           remove
                         </button>
@@ -745,23 +782,23 @@ export default function AiInfluencerStudio() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="mt-6 w-full rounded-2xl border border-indigo-500 bg-indigo-600 px-4 py-3 font-medium hover:bg-indigo-500 disabled:opacity-60"
+                className="mt-6 w-full rounded-2xl border border-sky-500/50 bg-sky-600 px-4 py-3 font-semibold hover:bg-sky-500 disabled:opacity-60 shadow-[0_0_0_1px_rgba(56,189,248,.25)]"
               >
                 {isLoading ? "Generating…" : "Generate"}
               </button>
 
-              {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+              {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
 
-              <p className="mt-4 text-xs text-neutral-500">
+              <p className="mt-4 text-xs text-white/50">
                 Tip: add camera & lens hints (e.g. "85mm, f/1.8"), mood ("golden hour"), and wardrobe ("monochrome blazer").
               </p>
             </form>
 
             {/* Results */}
-            <section className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Results</h2>
-                {images.length > 0 && (
+            <SectionCard
+              title="Results"
+              action={
+                images.length > 0 && (
                   <button
                     onClick={() => {
                       images.forEach((img, i) => {
@@ -773,24 +810,24 @@ export default function AiInfluencerStudio() {
                         a.remove();
                       });
                     }}
-                    className="rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-800"
+                    className="rounded-xl border border-white/10 px-3 py-2 text-sm hover:bg-neutral-900"
                   >
                     Download all
                   </button>
-                )}
-              </div>
-
+                )
+              }
+            >
               {isLoading && (
-                <div className="flex h-40 items-center justify-center rounded-xl border border-neutral-800">
+                <div className="flex h-40 items-center justify-center rounded-xl border border-white/10">
                   <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-                    <p className="mt-2 text-neutral-400">Rendering avatars…</p>
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400"></div>
+                    <p className="mt-2 text-white/60">Rendering avatars…</p>
                   </div>
                 </div>
               )}
 
               {!isLoading && images.length === 0 && (
-                <div className="flex h-40 items-center justify-center rounded-xl border border-neutral-800 text-neutral-500">
+                <div className="flex h-40 items-center justify-center rounded-xl border border-white/10 text-white/50">
                   No images yet. Generate to see results here.
                 </div>
               )}
@@ -798,86 +835,88 @@ export default function AiInfluencerStudio() {
               {!isLoading && images.length > 0 && (
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                   {images.map((img) => (
-                    <figure key={img.id} className="group overflow-hidden rounded-2xl border border-neutral-800 relative">
+                    <figure key={img.id} className="group relative overflow-hidden rounded-2xl border border-white/10">
                       <img
                         src={img.url}
                         alt="AI influencer"
-                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-60 transition-all opacity-0 group-hover:opacity-100 flex items-center justify-center">
-                        <a
-                          href={img.url}
-                          download={`avatar_${img.i + 1}.png`}
-                          className="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-3 py-2 text-sm"
-                        >
-                          Download
-                        </a>
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-colors">
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <a
+                            href={img.url}
+                            download={`avatar_${img.i + 1}.png`}
+                            className="bg-sky-600 hover:bg-sky-500 rounded-lg px-3 py-2 text-sm font-medium"
+                          >
+                            Download
+                          </a>
+                        </div>
                       </div>
                     </figure>
                   ))}
                 </div>
               )}
-            </section>
+            </SectionCard>
           </div>
         ) : (
           // ---------------------- History Tab ----------------------
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Generation History</h2>
-              {history.length > 0 && (
+          <SectionCard
+            title="Generation History"
+            action={
+              history.length > 0 && (
                 <button
                   onClick={() => {
                     if (confirm("Clear all history?")) clearAllHistory();
                   }}
-                  className="rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-800"
+                  className="rounded-xl border border-white/10 px-3 py-2 text-sm hover:bg-neutral-900"
                 >
                   Clear all
                 </button>
-              )}
-            </div>
-
+              )
+            }
+          >
             {history.length === 0 ? (
-              <div className="flex h-40 items-center justify-center rounded-xl border border-neutral-800 text-neutral-500">
+              <div className="flex h-40 items-center justify-center rounded-xl border border-white/10 text-white/50">
                 No generation history yet.
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {history.map((img) => (
-                  <figure key={img.id} className="group overflow-hidden rounded-2xl border border-neutral-800 relative">
+                  <figure key={img.id} className="group relative overflow-hidden rounded-2xl border border-white/10">
                     <img
                       src={img.url}
                       alt="Generated influencer"
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-80 transition-all opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center p-3">
-                      <p className="text-xs text-neutral-300 text-center mb-2 line-clamp-3">
-                        {(img.prompt || '').substring(0, 100)}...
-                      </p>
-                      <div className="flex gap-2">
-                        <a
-                          href={img.url}
-                          download={`avatar_${img.timestamp || Date.now()}.png`}
-                          className="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-3 py-1 text-xs"
-                        >
-                          Download
-                        </a>
-                        <button
-                          onClick={() => {
-                            if (confirm("Delete this image from local history?")) {
-                              deleteHistoryImage(img);
-                            }
-                          }}
-                          className="bg-red-600 hover:bg-red-500 rounded-lg px-3 py-1 text-xs"
-                        >
-                          Delete
-                        </button>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/70 transition-colors">
+                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-3">
+                        <p className="mb-2 line-clamp-3 text-center text-xs text-white/80">{(img.prompt || "").substring(0, 110)}...</p>
+                        <div className="flex gap-2">
+                          <a
+                            href={img.url}
+                            download={`avatar_${img.timestamp || Date.now()}.png`}
+                            className="bg-sky-600 hover:bg-sky-500 rounded-lg px-3 py-1 text-xs"
+                          >
+                            Download
+                          </a>
+                          <button
+                            onClick={() => {
+                              if (confirm("Delete this image from local history?")) {
+                                deleteHistoryImage(img);
+                              }
+                            }}
+                            className="bg-rose-600 hover:bg-rose-500 rounded-lg px-3 py-1 text-xs"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </figure>
                 ))}
               </div>
             )}
-          </div>
+          </SectionCard>
         )}
       </div>
     </div>

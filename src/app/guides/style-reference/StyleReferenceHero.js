@@ -5,12 +5,12 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 
 export default function StyleReferenceHero({
-  title = "Nsfw Demo",
+  title = "Nsfw Text to Video Demo",
   tag = "Style Reference",
-  coverSrc = "/images/guide2.jpg",
+  coverSrc = "/images/image6.jpg",
   // NSFW demo assets (put these files under /public/videos & /public/images)
   videoSrc = "/videos/vid2.mp4",
-  posterSrc = "/images/guide2.jpg",
+  posterSrc = "/images/dt1.jpg",
   captionTrack = "", // e.g. "/videos/style-ref-demo.vtt"
   consentKey = "nsfwConsent:style-reference", // localStorage key
 }) {
@@ -49,7 +49,7 @@ export default function StyleReferenceHero({
           <Badge className="mb-4 bg-pink-600/80 border-none">{tag}</Badge>
           <h1 className="mb-4 text-4xl font-bold md:text-5xl">{title}</h1>
           <p className="text-lg text-white/80">
-            Discover how to apply consistent visual styles across your AI creations by referencing existing images or artwork.
+            Discover how the quality of text to video from wan 2.2 engine does nsfw. Cinematic
           </p>
         </div>
       </div>

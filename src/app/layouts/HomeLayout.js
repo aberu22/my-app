@@ -1,12 +1,11 @@
 "use client"
-
-import HomeSidebar from "../components/HomeSidebar";
+import CreateSidebar from "../components/CreateSidebar";
 
 export default function HomeLayout({ children }) {
   return (
     <div className=" bg-black  flex h-screen  text-white">
       {/* 🔥 Sidebar */}
-      <HomeSidebar />
+      <CreateSidebar />
 
       {/* 🔥 Main Content */}
       <div className="flex-1 overflow-y-auto p-6">{children}</div>

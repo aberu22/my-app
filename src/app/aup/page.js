@@ -1,15 +1,15 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Acceptable Use Policy — [Your Company Name]",
-  description: "Rules for using [Your Company Name]'s AI services safely and legally.",
+  title: "Acceptable Use Policy — FantasyVision.AI",
+  description: "Rules for using FantasyVision.AI's AI services safely and legally.",
 };
 
 export default function AUPPage() {
   const lastUpdated = "September 10, 2025";
 
   const aup = `
-Acceptable Use Policy (AUP) — Draft
+Acceptable Use Policy (AUP) 
 Last updated: ${lastUpdated}
 
 This Acceptable Use Policy (“AUP”) forms part of our Terms of Service.  
@@ -40,8 +40,8 @@ We may:
 - Preserve evidence consistent with legal obligations.
 
 4) Reporting
-To report abuse, email: [abuse@yourdomain.com].  
-If you believe your content was removed by mistake, contact [support@yourdomain.com].
+To report abuse, email: abuse@FantasyVision.AI.  
+If you believe your content was removed by mistake, contact support@yFantasyVision.AI.com.
 
 ---
 

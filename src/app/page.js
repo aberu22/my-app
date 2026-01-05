@@ -1,10 +1,20 @@
-export const metadata = {
-  title: "FantasyVision.AI | From Vision to Screen",
-  description: "Create videos and images from text using advanced AI.",
-};
-
-import HeroClient from "./HeroClient"; // New file we'll create
+import HeroClient from "./HeroClient";
 
 export default function HomePage() {
-  return <HeroClient />;
+  return (
+    <>
+      {/* Main hero renders H1 immediately */}
+      <HeroClient />
+
+      {/* Subtle SEO reinforcement (safe + natural) */}
+      <section className="sr-only">
+        <h2>AI Video Generator</h2>
+        <p>
+          Fantasy AI is an AI-powered platform that helps creators generate
+          cinematic videos from text prompts and images using advanced
+          generative models.
+        </p>
+      </section>
+    </>
+  );
 }

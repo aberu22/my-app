@@ -1,16 +1,14 @@
-export const metadata = {
-  title: "Account Settings | NeonVision.AI",
-  description: "Manage your NeonVision.AI account, billing, and subscription preferences.",
-  keywords: ["account settings", "NeonVision account", "AI subscription", "billing dashboard"],
-  metadataBase: new URL("https://yourdomain.com"), // ← Replace with your real domain
-  openGraph: {
-    title: "Account Settings | NeonVision.AI",
-    description: "Access and manage your NeonVision.AI account and billing securely.",
-    url: "/account", // relative path — resolves correctly via metadataBase
-    type: "website",
-  },
-};
+// app/account/layout.js
+import AccountSidebar from "../components/AccountSidebar";
 
 export default function AccountLayout({ children }) {
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-zinc-950 text-white flex">
+      <AccountSidebar />
+
+      <main className="flex-1 p-6 lg:p-10">
+        {children}
+      </main>
+    </div>
+  );
 }

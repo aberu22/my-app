@@ -1,18 +1,25 @@
 export const metadata = {
-  title: "NeonVision.AI | Create AI Videos & Images Instantly",
-  description: "Generate high-quality videos and images from text or photos using advanced AI. Try NeonVision.AI now — no experience needed.",
+  title: "AI Video Generator | Text & Image to Video – Fantasy AI",
+  description:
+    "Create cinematic AI videos from text or images. Fantasy AI is a powerful Sora-style text-to-video generator built for creators and teams.",
   keywords: [
     "AI video generator",
-    "AI image creator",
-    "text to video",
-    "text to image",
-    "NeonVision AI"
+    "text to video AI",
+    "image to video AI",
+    "Sora alternative",
+    "AI video maker",
+    "Fantasy AI",
   ],
+  metadataBase: new URL("https://fantasyai.com"),
   openGraph: {
-    title: "NeonVision.AI | Create AI Videos & Images",
-    description: "Generate AI-powered videos and images from simple prompts. Easy, fast, and free to try.",
-    url: "https://yourdomain.com/home",
+    title: "AI Video Generator – Fantasy AI",
+    description:
+      "Generate high-quality AI videos from text or images. A modern Sora-style video generator for creators.",
+    url: "https://fantasyai.com",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
   },
 };
 

@@ -1,378 +1,542 @@
+// app/components/VideoPlayer.js
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import PropTypes from "prop-types";
 
-/**
- * Fully robust modern video player (JS, React, Next 13+)
- * - Dual sources (webm & mp4) + fallback reorder if first choice errors
- * - Autoplay handling with muted fallback
- * - canPlayType logging (webm/mp4) + URL logging
- * - Overlay with title/actions (download, copy, PiP, fullscreen)
- * - Offscreen auto-pause for perf
- */
+import React, { useEffect, useRef, useState, useCallback, useId } from "react";
+import {
+  Trash2,
+  Download,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  Pause,
+  Play as PlayIcon,
+  PanelRight,
+  PanelsTopLeft,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+function formatTime(s) {
+  if (!Number.isFinite(s)) return "00:00";
+  const m = Math.floor(s / 60).toString().padStart(2, "0");
+  const sec = Math.floor(s % 60).toString().padStart(2, "0");
+  return `${m}:${sec}`;
+}
+
 export default function VideoPlayer({
-  srcWebm,
-  srcMp4,
+  src,
   poster,
-  title,
-  className = "",
-  autoPlay = true,
-  loop = true,
-  muted = true,
-  controls = true,
-  preload = "metadata",
-  crossOrigin = "anonymous",
-  showOverlay = true,
-  autoPauseOffscreen = true,
-  downloadUrl, // optional override for the download button
+  rightPanelTitle = "Text to video",
+  creationTime = "02 Oct 2025 16:16:00",
+  promptText = "a",
+   onUseTemplate,
+ onRerun,
+ onDelete,
+ onOpenFullscreen,
 }) {
+  const shellRef = useRef(null);
   const videoRef = useRef(null);
-  const containerRef = useRef(null);
+  const progressRef = useRef(null);
 
-  // Prefer webm first (smaller/better) by default; we can flip on error
-  const [preferWebmFirst, setPreferWebmFirst] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(!!muted);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [errMsg, setErrMsg] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Capability check only runs client-side
-  const canPlay = useMemo(() => {
-    if (typeof document === "undefined") return { mp4: "", webm: "" };
-    const v = document.createElement("video");
-    return {
-      mp4: v.canPlayType("video/mp4"),
-      webm: v.canPlayType("video/webm"),
+  const videoId = useId();
+
+  //test debug src player
+    useEffect(() => {
+    console.log("VideoPlayr src =", src);
+  }, [src]);
+
+
+  // --- media sync
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => setIsPlaying(false);
+    const onTime = () => setCurrent(v.currentTime || 0);
+    const onMeta = () => {
+      setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+      setCurrent(v.currentTime || 0);
+      setIsMuted(v.muted);
+      setVolume(v.volume);
+      setPlaybackRate(v.playbackRate || 1);
+    };
+
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("ended", onEnded);
+    v.addEventListener("timeupdate", onTime);
+    v.addEventListener("loadedmetadata", onMeta);
+
+    return () => {
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+      v.removeEventListener("ended", onEnded);
+      v.removeEventListener("timeupdate", onTime);
+      v.removeEventListener("loadedmetadata", onMeta);
     };
   }, []);
 
-  // Debug logging on every render of URLs and capabilities
+  // --- fullscreen tracking
   useEffect(() => {
-    // Logs both URLs so you can validate them immediately
-    console.log("[VideoPlayer] URLs →", { srcWebm, srcMp4, poster, preferWebmFirst });
-    // Logs codec support
-    console.log("[VideoPlayer] canPlayType →", canPlay);
-  }, [srcWebm, srcMp4, poster, preferWebmFirst, canPlay]);
+    const onFsChange = () => {
+      const doc = document;
+      const active =
+        !!doc.fullscreenElement ||
+        !!doc.webkitFullscreenElement ||
+        !!doc.msFullscreenElement;
+      setIsFullscreen(active);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("webkitfullscreenchange", onFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("webkitfullscreenchange", onFsChange);
+    };
+  }, []);
 
-  // Try to kick off autoplay and fall back to muted autoplay if needed
+  // --- shortcuts
   useEffect(() => {
-    const el = videoRef.current;
-    if (!el || !autoPlay) return;
+    const el = shellRef.current;
+    if (!el) return;
 
-    const tryPlay = async () => {
-      try {
-        await el.play();
-        setIsPlaying(true);
-      } catch (err) {
-        // Some browsers require muted to autoplay
-        if (!el.muted) {
-          el.muted = true;
-          setIsMuted(true);
-          try {
-            await el.play();
-            setIsPlaying(true);
-          } catch (err2) {
-            console.warn("[VideoPlayer] Autoplay blocked:", err2?.message || err2);
-          }
-        } else {
-          console.warn("[VideoPlayer] Autoplay blocked:", err?.message || err);
-        }
+    const onKey = (e) => {
+      const v = videoRef.current;
+      if (!v) return;
+
+      switch (e.key) {
+        case " ":
+        case "k":
+          e.preventDefault();
+          togglePlay();
+          break;
+        case "m":
+          toggleMute();
+          break;
+        case "f":
+          toggleFullscreen();
+          break;
+        case "ArrowRight":
+          v.currentTime = Math.min((v.currentTime || 0) + 5, v.duration || 0);
+          break;
+        case "ArrowLeft":
+          v.currentTime = Math.max((v.currentTime || 0) - 5, 0);
+          break;
+        case "Home":
+          v.currentTime = 0;
+          break;
+        case "End":
+          v.currentTime = v.duration || 0;
+          break;
+        default:
       }
     };
 
-    tryPlay();
-  }, [autoPlay]);
+    el.addEventListener("keydown", onKey);
+    return () => el.removeEventListener("keydown", onKey);
+  }, []);
 
-  // Auto pause when scrolled offscreen (saves CPU/GPU)
-  useEffect(() => {
-    if (!autoPauseOffscreen || typeof IntersectionObserver === "undefined") return;
-    const el = videoRef.current;
-    if (!el) return;
+  const togglePlay = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v) return;
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (!entry) return;
-        if (entry.isIntersecting) {
-          if (autoPlay && !el.paused) return; // already playing
-          if (autoPlay) el.play().catch(() => {});
-        } else {
-          el.pause();
-        }
-      },
-      { root: null, threshold: 0.1 }
-    );
-
-    io.observe(el);
-    return () => io.disconnect();
-  }, [autoPauseOffscreen, autoPlay]);
-
-  // Event handlers
-  const handleError = (e) => {
-    const el = e.currentTarget;
-    const failedSrc = el?.currentSrc || "";
-    const info = {
-      failedSrc,
-      networkState: el?.networkState,
-      readyState: el?.readyState,
-      error: el?.error ? { code: el.error.code, message: el.error.message } : null,
-    };
-    console.error("[VideoPlayer] onError →", info);
-
-    // Fallback: if we have both sources and it failed, try swapping order once
-    if (srcWebm && srcMp4) {
-      const failedIsWebm = failedSrc.toLowerCase().includes(".webm");
-      const failedIsMp4 = failedSrc.toLowerCase().includes(".mp4");
-
-      // If the one we preferred failed, flip preference
-      if ((preferWebmFirst && failedIsWebm) || (!preferWebmFirst && failedIsMp4)) {
-        console.warn("[VideoPlayer] Swapping source preference and retrying…");
-        setPreferWebmFirst((p) => !p);
-      }
-    }
-  };
-
-  const handlePlay = () => setIsPlaying(true);
-  const handlePause = () => setIsPlaying(false);
-
-  const togglePlay = () => {
-    const el = videoRef.current;
-    if (!el) return;
-    if (el.paused) {
-      el.play().then(() => setIsPlaying(true)).catch(() => {});
-    } else {
-      el.pause();
-      setIsPlaying(false);
-    }
-  };
-
-  const toggleMute = () => {
-    const el = videoRef.current;
-    if (!el) return;
-    el.muted = !el.muted;
-    setIsMuted(el.muted);
-  };
-
-  const enterPip = async () => {
-    const el = videoRef.current;
-    if (!el) return;
     try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else if (document.pictureInPictureEnabled && typeof el.requestPictureInPicture === "function") {
-        await el.requestPictureInPicture();
+      if (v.readyState < 2) {
+        await new Promise((res, rej) => {
+          const onCanPlay = () => {
+            v.removeEventListener("canplay", onCanPlay);
+            v.removeEventListener("error", onErr);
+            res();
+          };
+          const onErr = (e) => {
+            v.removeEventListener("canplay", onCanPlay);
+            v.removeEventListener("error", onErr);
+            rej((e && e.error) || new Error("Media error"));
+          };
+          v.addEventListener("canplay", onCanPlay, { once: true });
+          v.addEventListener("error", onErr, { once: true });
+        });
       }
-    } catch (err) {
-      console.warn("[VideoPlayer] PiP error:", err?.message || err);
+
+      if (v.paused) await v.play();
+      else v.pause();
+
+      setErrMsg(null);
+    } catch (e) {
+      const name = e && e.name ? e.name : "PlaybackError";
+      let msg = "Couldn't start playback.";
+      if (name === "NotSupportedError")
+        msg = "This browser can't play the provided media (codec or container unsupported).";
+      if (name === "NotAllowedError")
+        msg = "Autoplay or playback was blocked. Try pressing play again or unmute first.";
+      if (name === "AbortError") msg = "Playback was interrupted.";
+
+      if (src && /^https?:\/\//.test(src)) {
+        msg += " If this video is hosted on another domain, ensure CORS is enabled.";
+      }
+
+      setErrMsg(msg);
+    }
+  }, [src]);
+
+  const toggleMute = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setIsMuted(v.muted);
+  }, []);
+
+  const onVolumeChange = (val) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const next = Math.min(Math.max(val, 0), 1);
+    v.volume = next;
+    setVolume(next);
+    if (next > 0 && v.muted) {
+      v.muted = false;
+      setIsMuted(false);
     }
   };
 
-  const enterFullscreen = async () => {
-    const el = containerRef.current || videoRef.current;
+  const onRateChange = (val) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const allowed = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const next = allowed.includes(val) ? val : 1;
+    v.playbackRate = next;
+    setPlaybackRate(next);
+  };
+
+  const pct = duration ? (current / duration) * 100 : 0;
+
+  // --- scrubbing
+  const seekToClientX = (clientX) => {
+    const bar = progressRef.current;
+    const v = videoRef.current;
+    if (!bar || !v) return;
+    const r = bar.getBoundingClientRect();
+    const ratio = Math.min(Math.max((clientX - r.left) / r.width, 0), 1);
+    v.currentTime = ratio * (v.duration || 0);
+  };
+  const onPointerDown = (e) => {
+    setIsScrubbing(true);
+    seekToClientX(e.clientX);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  };
+  const onPointerMove = (e) => {
+    if (!isScrubbing) return;
+    seekToClientX(e.clientX);
+  };
+  const onPointerUp = () => {
+    setIsScrubbing(false);
+    window.removeEventListener("pointermove", onPointerMove);
+  };
+
+  const onProgressKeyDown = (e) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const step = 5;
+    switch (e.key) {
+      case "ArrowRight":
+      case "ArrowUp":
+        e.preventDefault();
+        v.currentTime = Math.min((v.currentTime || 0) + step, v.duration || 0);
+        break;
+      case "ArrowLeft":
+      case "ArrowDown":
+        e.preventDefault();
+        v.currentTime = Math.max((v.currentTime || 0) - step, 0);
+        break;
+      case "Home":
+        e.preventDefault();
+        v.currentTime = 0;
+        break;
+      case "End":
+        e.preventDefault();
+        v.currentTime = v.duration || 0;
+        break;
+      default:
+    }
+  };
+
+  // --- fullscreen
+  const requestNativeFullscreen = (el) => {
+    if (el.requestFullscreen) return el.requestFullscreen();
+    if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+    if (el.msRequestFullscreen) return el.msRequestFullscreen();
+  };
+  const exitNativeFullscreen = () => {
+    if (document.exitFullscreen) return document.exitFullscreen();
+    if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+    if (document.msExitFullscreen) return document.msExitFullscreen();
+  };
+  const toggleFullscreen = () => {
+    const el = shellRef.current;
     if (!el) return;
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else if (el.requestFullscreen) {
-        await el.requestFullscreen();
-      }
-    } catch (err) {
-      console.warn("[VideoPlayer] Fullscreen error:", err?.message || err);
-    }
+    if (isFullscreen) exitNativeFullscreen();
+    else requestNativeFullscreen(el);
   };
 
-  // Keyboard shortcuts (space play/pause, m mute)
-  const onKeyDown = (e) => {
-    if (e.key === " " || e.code === "Space") {
-      e.preventDefault();
-      togglePlay();
-    } else if (e.key.toLowerCase() === "m") {
-      toggleMute();
-    }
-  };
-
-  // Source order based on preference
-  const sources = useMemo(() => {
-    const arr = [];
-    if (preferWebmFirst) {
-      if (srcWebm) arr.push({ src: srcWebm, type: "video/webm" });
-      if (srcMp4) arr.push({ src: srcMp4, type: "video/mp4" });
-    } else {
-      if (srcMp4) arr.push({ src: srcMp4, type: "video/mp4" });
-      if (srcWebm) arr.push({ src: srcWebm, type: "video/webm" });
-    }
-    return arr;
-  }, [preferWebmFirst, srcWebm, srcMp4]);
-
-  const resolvedDownloadUrl = downloadUrl || srcMp4 || srcWebm || "";
-
+  // ---- UI
   return (
-    <div
-      ref={containerRef}
-      className={`group relative overflow-hidden rounded-2xl bg-black/40 ring-1 ring-white/10 ${className}`}
-      onKeyDown={onKeyDown}
-      tabIndex={0}
-      role="region"
-      aria-label={title || "Video player"}
-    >
-      {/* Background blurred layer (decorative) */}
-      {(srcWebm || srcMp4) && (
-        <video
-          className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-20 pointer-events-none"
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-        >
-          {sources.map((s) => (
-            <source key={`bg-${s.src}`} src={s.src} type={s.type} />
-          ))}
-        </video>
-      )}
-
-      {/* Foreground player */}
-      <video
-        ref={videoRef}
-        poster={poster}
-        className="relative z-10 w-full h-full object-contain"
-        autoPlay={autoPlay}
-        loop={loop}
-        muted={isMuted}
-        playsInline
-        controls={controls}
-        preload={preload}
-        crossOrigin={crossOrigin}
-        onError={handleError}
-        onPlay={handlePlay}
-        onPause={handlePause}
+    <section className="w-full px-3 sm:px-4">
+      {/* Outer card: Sora theme – long/wide container */}
+      <div
+        className="mx-auto my-3 w-full rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl"
       >
-        {sources.map((s) => (
-          <source key={s.src} src={s.src} type={s.type} />
-        ))}
-        Your browser does not support HTML5 video.
-      </video>
+        {/* Header strip (filters/actions) */}
 
-      {/* Overlay */}
-      {showOverlay && (
-        <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 flex items-center gap-3">
-          <div className="text-white text-sm font-medium line-clamp-1">
-            {title || "Generated video"}
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {/* Play/Pause */}
-            <button
-              onClick={togglePlay}
-              className="p-2 rounded-full bg-white/5 hover:bg-white/10 ring-1 ring-white/10 transition"
-              title={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="6" y="4" width="4" height="16" />
-                  <rect x="14" y="4" width="4" height="16" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </button>
+        <div className="flex items-center justify-between px-4 py-3 text-zinc-300">
+  {/* LEFT: View full screen */}
+  <button
+    type="button"
+    onClick={onOpenFullscreen}
+    className="
+      inline-flex items-center gap-2
+      rounded-full bg-black/60 px-3 py-1.5
+      text-xs text-white
+      ring-1 ring-white/10
+      hover:bg-black/80
+      transition
+    "
+  >
+    View full screen
+  </button>
 
-            {/* Mute */}
-            <button
-              onClick={toggleMute}
-              className="p-2 rounded-full bg-white/5 hover:bg-white/10 ring-1 ring-white/10 transition"
-              title={isMuted ? "Unmute" : "Mute"}
-            >
-              {isMuted ? (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 9v6h4l5 5V4l-5 5H9z" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 5L6 9H2v6h4l5 4z" />
-                  <path d="M15 9a5 5 0 0 1 0 6" />
-                  <path d="M18 6a9 9 0 0 1 0 12" />
-                </svg>
-              )}
-            </button>
+  {/* RIGHT: Panel */}
+  <span className="hidden items-center gap-1 rounded bg-zinc-800/60 px-3 py-1 text-[11px] sm:flex">
+    <PanelRight className="h-4 w-4" />
+    Panel
+  </span>
+</div>
 
-            {/* Download */}
-            {resolvedDownloadUrl ? (
-              <a
-                href={resolvedDownloadUrl}
-                download
-                className="p-2 rounded-full bg-white/5 hover:bg-white/10 ring-1 ring-white/10 transition"
-                title="Download"
+        
+
+        {/* Shell: full-width player + right panel */}
+        <div
+          id="vp-shell"
+          ref={shellRef}
+          className="flex w-full gap-4 px-3 pb-4 focus:outline-none"
+          tabIndex={0}
+          aria-label="Custom video player shell"
+        >
+          {/* PLAYER */}
+          <div className="relative min-w-0 flex-1 overflow-hidden rounded-xl border border-zinc-800 bg-[#0b0e13]">
+            {/* Stage keeps aspect and centers content; gutter space left/right like screenshot */}
+            <div className="relative w-full bg-black">
+              <div className="mx-auto aspect-video w-full">
+                <video
+                  id={videoId}
+                  ref={videoRef}
+                  src={src}
+                  poster={poster}
+                  playsInline
+                  crossOrigin="anonymous"
+                  preload="metadata"
+                  className="h-full w-full object-contain"
+                  aria-label="video"
+                  onError={() =>
+                    setErrMsg("Failed to load media (network, CORS, or format issue).")
+                  }
+                  onClick={togglePlay}
+                 
+                />
+              </div>
+
+              {/* Optional watermark bottom-right (Sora-like) */}
+              <div className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/40 px-2 py-1 text-[10px] text-white/80">
+                Wan
+              </div>
+
+              {/* Minimal white control strip (bottom-left) */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0">
+                {/* progress line */}
+                <div
+                  ref={progressRef}
+                  onPointerDown={onPointerDown}
+                  onKeyDown={onProgressKeyDown}
+                  className="pointer-events-auto relative mx-7 mb-2 h-[3px] cursor-pointer rounded bg-white/25"
+                  role="slider"
+                  tabIndex={0}
+                  aria-controls={videoId}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(pct)}
+                  aria-valuetext={`${formatTime(current)} of ${formatTime(duration)}`}
+                  aria-label="Seek"
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 rounded bg-white transition-[width]"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+
+                <div className="pointer-events-auto flex items-center justify-between px-5 pb-4 text-xs text-white">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={togglePlay}
+                      className="rounded p-1.5 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30"
+                      aria-label={isPlaying ? "Pause" : "Play"}
+                      aria-controls={videoId}
+                    >
+                      {isPlaying ? <Pause className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
+                    </button>
+                    <span className="tabular-nums">
+                      {formatTime(current)} / {formatTime(duration)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="hidden items-center gap-2 sm:flex">
+                      <button
+                        onClick={toggleMute}
+                        className="rounded p-1.5 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30"
+                        aria-label={isMuted ? "Unmute" : "Mute"}
+                        aria-controls={videoId}
+                      >
+                        {isMuted || volume === 0 ? (
+                          <VolumeX className="h-4 w-4" />
+                        ) : (
+                          <Volume2 className="h-4 w-4" />
+                        )}
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={Math.round(volume * 100)}
+                        onChange={(e) => onVolumeChange(Number(e.target.value) / 100)}
+                        aria-label="Volume"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(volume * 100)}
+                        className="h-1.5 w-24 cursor-pointer appearance-none rounded bg-white/25 accent-white"
+                      />
+                    </div>
+
+                    <select
+                      className="hidden rounded-md border border-white/20 bg-black/30 px-2 py-1 text-[11px] text-white sm:block"
+                      value={playbackRate}
+                      onChange={(e) => onRateChange(Number(e.target.value))}
+                      aria-label="Playback rate"
+                    >
+                      {[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => (
+                        <option key={r} value={r}>{r}×</option>
+                      ))}
+                    </select>
+
+                    
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Error */}
+            {errMsg && (
+              <div
+                className="m-3 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+                aria-live="polite"
               >
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-                  <path d="M7 11l5 5 5-5" />
-                  <path d="M12 4v12" />
-                </svg>
-              </a>
-            ) : null}
-
-            {/* Copy link */}
-            {(srcMp4 || srcWebm) && (
-              <button
-                onClick={() => {
-                  const toCopy = srcMp4 || srcWebm;
-                  if (!toCopy) return;
-                  navigator.clipboard?.writeText(toCopy).then(() => {
-                    console.log("[VideoPlayer] Copied URL:", toCopy);
-                  });
-                }}
-                className="p-2 rounded-full bg-white/5 hover:bg-white/10 ring-1 ring-white/10 transition"
-                title="Copy video link"
-              >
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M4 12v-1a8 8 0 0 1 16 0v1" />
-                  <path d="M12 16v5m0 0l-3-3m3 3l3-3" />
-                </svg>
-              </button>
+                {errMsg}
+              </div>
             )}
-
-            {/* PiP */}
-            <button
-              onClick={enterPip}
-              className="p-2 rounded-full bg-white/5 hover:bg-white/10 ring-1 ring-white/10 transition"
-              title="Picture in Picture"
-            >
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <rect x="3" y="4" width="18" height="14" rx="2" />
-                <rect x="12" y="9" width="7" height="5" rx="1" />
-              </svg>
-            </button>
-
-            {/* Fullscreen */}
-            <button
-              onClick={enterFullscreen}
-              className="p-2 rounded-full bg-white/5 hover:bg-white/10 ring-1 ring-white/10 transition"
-              title="Fullscreen"
-            >
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
-              </svg>
-            </button>
           </div>
+
+          {/* RIGHT PANEL (Sora themed) */}
+          <aside className="w-[300px] shrink-0 rounded-xl border border-zinc-900 bg-zinc-900 p-4">
+            <div className="mb-3 text-sm font-semibold text-white/90">{rightPanelTitle}</div>
+
+            {/* prompt snippet */}
+            <div className="mb-3 text-[13px] text-zinc-300 line-clamp-3">{promptText}</div>
+
+            {/* tags row like screenshot */}
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-200">Wan2.6</span>
+              <span className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-200">1080P</span>
+              <span className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-200">16:9</span>
+            </div>
+
+            {/* creation time */}
+            <div className="mb-6 text-[11px] text-zinc-500">
+              Creation Time <span className="ml-2 text-zinc-300">{creationTime}</span>
+            </div>
+
+            {/* actions exactly like screenshot */}
+            <div className="mt-auto grid grid-cols-3 gap-2">
+              <Button
+              variant="secondary"
+              className="col-span-2 h-10 rounded-lg bg-zinc-200 text-black hover:bg-zinc-100"
+              onClick={() => {
+                if (promptText) onUseTemplate?.(promptText);
+              }}
+            >
+              Use
+            </Button>
+
+             
+              <Button
+              variant="secondary"
+              className="h-10 rounded-lg bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+              onClick={() => {
+                onRerun?.();
+              }}
+            >
+              Rerun
+            </Button>
+
+            
+
+
+              <Button
+                variant="secondary"
+                className="col-span-2 h-10 rounded-lg bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+                onClick={() => {
+                  if (!src) return;
+                  const a = document.createElement("a");
+                  a.href = src;
+                  a.download = "video.mp4";
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Save
+              </Button>
+
+
+
+              <Button
+              variant="secondary"
+              className="h-10 rounded-lg bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+              title="Delete"
+              aria-label="Delete"
+              onClick={() => {
+                if (confirm("Delete this video?")) {
+                  onDelete?.();
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              </Button>
+
+
+              
+            </div>
+          </aside>
         </div>
-      )}
-    </div>
+      </div>
+    </section>
   );
 }
-
-VideoPlayer.propTypes = {
-  srcWebm: PropTypes.string,
-  srcMp4: PropTypes.string,
-  poster: PropTypes.string,
-  title: PropTypes.string,
-  className: PropTypes.string,
-  autoPlay: PropTypes.bool,
-  loop: PropTypes.bool,
-  muted: PropTypes.bool,
-  controls: PropTypes.bool,
-  preload: PropTypes.oneOf(["none", "metadata", "auto"]),
-  crossOrigin: PropTypes.string,
-  showOverlay: PropTypes.bool,
-  autoPauseOffscreen: PropTypes.bool,
-  downloadUrl: PropTypes.string,
-};

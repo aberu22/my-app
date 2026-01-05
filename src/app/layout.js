@@ -1,10 +1,9 @@
 // app/layout.js
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Navbar from "./components/Navbar";
-import { AuthProvider } from "@/context/AuthContext";
-import { ImageGenerationProvider } from "../context/ImageGenrationContext";
 
+import { AuthProvider } from "@/context/AuthContext";
+import { ImageGenerationProvider } from "@/context/ImageGenrationContext";
 import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({
@@ -18,8 +17,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "FantasyVision.AI",
-  description: "AI-powered image generation platform",
+  metadataBase: new URL("https://fantasyai.com"),
+  title: {
+    default: "Fantasy AI – AI Video & Image Generator",
+    template: "%s | Fantasy AI",
+  },
+  description:
+    "Fantasy AI is a powerful AI platform for creating videos and images from text or photos. Generate cinematic content instantly.",
 };
 
 export default function RootLayout({ children }) {
@@ -28,7 +32,7 @@ export default function RootLayout({ children }) {
       <body className="font-sans antialiased">
         <AuthProvider>
           <ImageGenerationProvider>
-            <Navbar />
+         
             <main>{children}</main>
             <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
           </ImageGenerationProvider>

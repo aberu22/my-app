@@ -1,15 +1,24 @@
 export const metadata = {
-  title: "Pricing | NeonVision.AI",
-  description: "Flexible and affordable pricing plans for AI video and image generation. Choose a plan that fits your creative needs.",
-  keywords: ["AI pricing", "NeonVision plans", "AI video generator cost", "image generator subscription"],
-  metadataBase: new URL("https://yourdomain.com"), // ← Replace with actual domain
+  title: "AI Video Generator Pricing | NeonVision.AI",
+  description:
+    "Transparent pricing for AI text-to-video and image-to-video generation. Compare plans and choose the best Sora alternative for your workflow.",
+  keywords: [
+    "AI video generator pricing",
+    "text to video AI pricing",
+    "image to video AI cost",
+    "Sora alternative pricing",
+    "AI video subscription",
+  ],
+  metadataBase: new URL("https://neonvision.ai"), // replace with real domain
   openGraph: {
-    title: "Pricing | NeonVision.AI",
-    description: "Explore pricing options for powerful AI video and image generation tools. Simple, transparent, and scalable.",
-    url: "/pricing", // relative path; resolves correctly with metadataBase
+    title: "AI Video Generator Pricing | NeonVision.AI",
+    description:
+      "Compare pricing plans for AI video generation. Create cinematic videos from text or images with NeonVision.AI.",
+    url: "/pricing",
     type: "website",
   },
 };
+
 
 export default function PricingLayout({ children }) {
   return <>{children}</>;

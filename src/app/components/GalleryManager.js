@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
-import { db, auth } from "@/lib/firebase";
+// components/GalleryManager.js
+'use client';
+
+import { useEffect, useState } from 'react';
+import { db, auth } from '@/lib/firebase';
 import {
   collection,
   addDoc,
@@ -9,130 +12,168 @@ import {
   where,
   doc,
   serverTimestamp,
-  deleteDoc
-} from "firebase/firestore";
-import { useImageGeneration } from "@/context/ImageGenrationContext";
-import { FiEye, FiEyeOff, FiTrash2, FiLock, FiGlobe } from "react-icons/fi";
-import { FaSpinner } from "react-icons/fa";
+  deleteDoc,
+} from 'firebase/firestore';
+import { useImageGeneration } from '@/context/ImageGenrationContext';
+import { FiTrash2, FiGlobe, FiLock } from 'react-icons/fi';
+import { FaSpinner } from 'react-icons/fa';
 
-// ✅ Helper to check if an image URL is valid & accessible
+/** Quick URL probe so we don’t store broken links */
 async function urlOk(url) {
   try {
-    const r = await fetch(url, { method: "HEAD" });
+    const r = await fetch(url, { method: 'HEAD' });
     return r.ok;
   } catch {
     return false;
   }
 }
 
-export default function GalleryManager({ generatedImageUrl, prompt, negativePrompt, modelType, imageId }) {
+/**
+ * Props (rendered by ImageActionMenu):
+ * - generatedImageUrl: string
+ * - prompt: string
+ * - negativePrompt: string
+ * - modelType: string
+ * - imageId?: string               // existing Firestore doc id, if known
+ * - uiId?: string                  // UI id from the gallery tile (required for UI callbacks)
+ * - onDocId?(uiId, docId): void    // notify gallery once a doc id exists
+ * - onDeleted?(uiId, docId): void  // notify gallery after delete
+ * - onVisibilityChange?(uiId, isPublic): void // notify gallery after publish/unpublish
+ */
+export default function GalleryManager({
+  generatedImageUrl,
+  prompt,
+  negativePrompt,
+  modelType,
+  imageId, // optional Firestore id
+  uiId,
+  onDocId,
+  onDeleted,
+  onVisibilityChange,
+}) {
+  const [imageDocId, setImageDocId] = useState(imageId || null);
   const [isPublic, setIsPublic] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [imageDocId, setImageDocId] = useState(null);
   const { deleteImage } = useImageGeneration();
 
+  // Auto-save on mount/changes (private by default)
   useEffect(() => {
     autoSaveToPrivateFeed();
-  }, [generatedImageUrl, prompt, negativePrompt, modelType, auth.currentUser?.uid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    generatedImageUrl,
+    prompt,
+    negativePrompt,
+    modelType,
+    auth.currentUser?.uid,
+  ]);
 
   const autoSaveToPrivateFeed = async () => {
     const user = auth.currentUser;
     if (!generatedImageUrl || !user) return;
 
-    // ✅ Skip saving if the image URL is broken or from old structure
+    // If we already know the doc id, no need to create/lookup again
+    if (imageDocId) {
+      onDocId?.(uiId, imageDocId);
+      return;
+    }
+
+    // Skip saving if URL is not fetchable (avoids broken/legacy links)
     if (!(await urlOk(generatedImageUrl))) {
-      console.warn("Skipping broken/legacy imageUrl:", generatedImageUrl);
+      console.warn('Skipping broken/legacy imageUrl:', generatedImageUrl);
       return;
     }
 
     setSaving(true);
-
     try {
+      // De-dupe by user + imageUrl
       const q = query(
-        collection(db, "images"),
-        where("userId", "==", user.uid),
-        where("imageUrl", "==", generatedImageUrl)
+        collection(db, 'images'),
+        where('userId', '==', user.uid),
+        where('imageUrl', '==', generatedImageUrl)
       );
-      const querySnapshot = await getDocs(q);
+      const snap = await getDocs(q);
 
-      if (!querySnapshot.empty) {
-        const docSnap = querySnapshot.docs[0];
-        setImageDocId(docSnap.id);
-        setIsPublic(docSnap.data().isPublic);
-        setSaving(false);
+      if (!snap.empty) {
+        const found = snap.docs[0];
+        setImageDocId(found.id);
+        setIsPublic(!!found.data().isPublic);
+        onDocId?.(uiId, found.id);
         return;
       }
 
-      const imageRef = await addDoc(collection(db, "images"), {
+      // Create a new private record
+      const ref = await addDoc(collection(db, 'images'), {
         userId: user.uid,
-        username: user.displayName || "Anonymous",
-        avatar: user.photoURL || "/default-avatar.png",
+        username: user.displayName || 'Anonymous',
+        avatar: user.photoURL || '/default-avatar.png',
         imageUrl: generatedImageUrl,
-        prompt: prompt || "N/A",
-        negativePrompt: negativePrompt || "N/A",
-        modelType: modelType || "Unknown",
+        prompt: prompt || 'N/A',
+        negativePrompt: negativePrompt || 'N/A',
+        modelType: modelType || 'Unknown',
         isPublic: false,
         createdAt: serverTimestamp(),
       });
 
-      setImageDocId(imageRef.id);
+      setImageDocId(ref.id);
       setIsPublic(false);
-      console.log("✅ Image added to Private Feed:", imageRef.id);
-    } catch (error) {
-      console.error("🚨 Error saving image:", error);
+      onDocId?.(uiId, ref.id);
+      // eslint-disable-next-line no-console
+      console.log('✅ Image added to Private Feed:', ref.id);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('🚨 Error saving image:', err);
     } finally {
       setSaving(false);
     }
   };
 
-  const updateImageVisibility = async (imageId, newStatus) => {
-    if (!imageId) {
-      console.error("🚨 No image ID found! Cannot update visibility.");
-      return;
-    }
-
+  const togglePublish = async () => {
+    if (!imageDocId) return;
     setSaving(true);
-
     try {
-      const imageRef = doc(db, "images", imageId);
-      await updateDoc(imageRef, { isPublic: newStatus });
-      setIsPublic(newStatus);
-      console.log(`✅ Image moved to ${newStatus ? "Public" : "Private"} Feed!`);
-    } catch (error) {
-      console.error("🚨 Error updating visibility:", error);
+      const next = !isPublic;
+      await updateDoc(doc(db, 'images', imageDocId), { isPublic: next });
+      setIsPublic(next);
+      onVisibilityChange?.(uiId, next);
+      // eslint-disable-next-line no-console
+      console.log(`✅ ${next ? 'Published' : 'Unpublished'} image`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('🚨 Error toggling publish:', err);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    const docIdToDelete = imageId || imageDocId;
-    if (!docIdToDelete) {
-      console.error("No image ID found for deletion");
-      return;
-    }
-    if (!confirm("Are you sure you want to permanently delete this image?")) {
-      return;
-    }
+    if (!imageDocId) return;
+    if (!confirm('Delete this image permanently?')) return;
 
     setDeleting(true);
     try {
-      if (deleteImage && typeof deleteImage === "function") {
-        await deleteImage(docIdToDelete);
+      // If your context wraps deletion, use it; otherwise delete direct
+      if (typeof deleteImage === 'function') {
+        await deleteImage(imageDocId);
       } else {
-        await deleteDoc(doc(db, "images", docIdToDelete));
+        await deleteDoc(doc(db, 'images', imageDocId));
       }
-      console.log("✅ Image deleted successfully");
+      onDeleted?.(uiId, imageDocId);
       setImageDocId(null);
       setIsPublic(false);
-    } catch (error) {
-      console.error("🚨 Error deleting image:", error);
-      alert("Failed to delete image. Please try again.");
+      // eslint-disable-next-line no-console
+      console.log('✅ Image deleted');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('🚨 Error deleting image:', err);
+      alert('Failed to delete image. Please try again.');
     } finally {
       setDeleting(false);
     }
   };
+
+  const disabled = saving || deleting || !imageDocId;
 
   return (
     <div
@@ -143,62 +184,54 @@ export default function GalleryManager({ generatedImageUrl, prompt, negativeProm
         <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-zinc-800/50 text-zinc-400">
           <FaSpinner className="animate-spin text-purple-400" />
           <span className="text-sm">
-            {deleting ? "Deleting..." : "Saving changes..."}
+            {deleting ? 'Deleting…' : 'Saving changes…'}
           </span>
         </div>
       ) : (
         <div className="flex gap-2 w-full">
+          {/* Publish / Unpublish */}
           <button
-            onClick={() => updateImageVisibility(imageDocId, !isPublic)}
+            onClick={togglePublish}
+            disabled={disabled}
             className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
               isPublic
-                ? "bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-800/30 text-purple-300 hover:bg-purple-900/40"
-                : "bg-gradient-to-r from-zinc-800/50 to-zinc-900/50 border border-zinc-700 text-zinc-300 hover:bg-zinc-800/70"
-            }`}
-            disabled={saving || deleting}
+                ? 'bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-800/30 text-purple-300 hover:bg-purple-900/40'
+                : 'bg-gradient-to-r from-zinc-800/50 to-zinc-900/50 border border-zinc-700 text-zinc-300 hover:bg-zinc-800/70'
+            } disabled:opacity-50`}
+            title={isPublic ? 'Unpublish' : 'Publish'}
           >
-            {isPublic ? (
-              <>
-                <FiGlobe className="text-blue-400" />
-                <span>Public</span>
-              </>
-            ) : (
-              <>
-                <FiLock className="text-purple-400" />
-                <span>Private</span>
-              </>
-            )}
+            {isPublic ? <FiLock className="text-blue-400" /> : <FiGlobe className="text-purple-400" />}
+            <span>{isPublic ? 'Unpublish' : 'Publish'}</span>
           </button>
 
+          {/* Delete */}
           <button
             onClick={handleDelete}
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-red-900/30 to-rose-900/30 border border-red-800/30 text-red-300 hover:bg-red-900/40 px-3 py-2 rounded-lg transition-all text-sm font-medium"
-            disabled={saving || deleting}
+            disabled={disabled}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-red-900/30 to-rose-900/30 border border-red-800/30 text-red-300 hover:bg-red-900/40 px-3 py-2 rounded-lg transition-all text-sm font-medium disabled:opacity-50"
+            title="Delete"
           >
-            {deleting ? (
-              <FaSpinner className="animate-spin" />
-            ) : (
-              <>
-                <FiTrash2 />
-                <span>Delete</span>
-              </>
-            )}
+            <FiTrash2 />
+            <span>Delete</span>
           </button>
         </div>
       )}
 
-      <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-        <span>
-          {isPublic ? (
+      {/* Status row */}
+      <div className="flex items-center gap-2 font-semibold transition duration-150 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 disabled:aria-pressed:cursor-default disabled:aria-pressed:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-surface-border-10 active:outline-none h-8 px-4 text-xs bg-ghost-0 text-ghost-foreground-0 aria-pressed:bg-ghost-2 hover:enabled:bg-ghost-1 active:enabled:bg-ghost-2 rounded w-full justify-start">
+        {imageDocId ? (
+          isPublic ? (
             <span className="flex items-center gap-1 text-blue-400">
-              <FiEye className="text-xs" /> Visible to everyone
+              <FiGlobe className="text-xs" /> Published
             </span>
           ) : (
             <span className="flex items-center gap-1 text-purple-400">
-              <FiEyeOff className="text-xs" /> Only visible to you
+              <FiLock className="text-xs" /> Unpublished
             </span>
-          )}
-        </span>
+          )
+        ) : (
+          <span className="text-zinc-500">Preparing…</span>
+        )}
       </div>
     </div>
   );

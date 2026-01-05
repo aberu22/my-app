@@ -1,33 +1,57 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  images: { unoptimized: true },
-  experimental: {
-    serverActions: { bodySizeLimit: '10mb' },
+  images: {
+    unoptimized: true,
   },
+
+  experimental: {
+    serverActions: { bodySizeLimit: "10mb" },
+  },
+
   async rewrites() {
     return [
-      {
-        source: "/api/:path*",
-        destination: "https://jijcej1a7gw3fy-3000.proxy.runpod.net/sdapi/v1/:path*",
-      },
+
+      // ─────────────────────────────────────────────
+    // Stable Diffusion (AUTOMATIC1111)
+    // INTERNAL 7860 → PUBLIC /api
+    // ─────────────────────────────────────────────
+    {
+      source: "/api/:path*",
+      destination: "http://195.139.22.91:36548/sdapi/v1/:path*",
+    },
+
+    
+      // ─────────────────────────────────────────────
+      // ComfyUI (Wan 2.x) — INTERNAL 8188 → PUBLIC 55743
+      // ─────────────────────────────────────────────
       {
         source: "/comfyapi/:path*",
-        destination: "https://kvlgksxwjlt202-8188.proxy.runpod.net/:path*",
+        destination: "http://47.186.29.91:55743/:path*",
       },
+
+      // ─────────────────────────────────────────────
+      // Backend API — INTERNAL 8899 → PUBLIC 55073
+      // ─────────────────────────────────────────────
       {
-        // keep /videoapi calls going to your FastAPI backend
         source: "/videoapi/:path*",
-        destination: "https://kvlgksxwjlt202-8899.proxy.runpod.net/videoapi/:path*",
+        destination: "http://47.186.29.91:55073/videoapi/:path*",
       },
+
+      // ─────────────────────────────────────────────
+      // Backend static outputs (videos)
+      // ─────────────────────────────────────────────
       {
         source: "/output/:path*",
-        destination: "https://kvlgksxwjlt202-8899.proxy.runpod.net/output/:path*",
+        destination: "http://47.186.29.91:55073/output/:path*",
       },
+
+      // ─────────────────────────────────────────────
+      // LoRAs served by backend
+      // ─────────────────────────────────────────────
       {
-        // 👇 NEW: proxy thumbnails served by FastAPI's `app.mount("/loras", ...)`
         source: "/loras/:path*",
-        destination: "https://kvlgksxwjlt202-8899.proxy.runpod.net/loras/:path*",
+        destination: "http://47.186.29.91:55073/loras/:path*",
       },
     ];
   },

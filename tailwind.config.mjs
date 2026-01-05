@@ -2,6 +2,7 @@ import defaultTheme from 'tailwindcss/defaultTheme';
 
 export default {
   darkMode: ["class"],
+  
 
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,16 +10,26 @@ export default {
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
 
+  // ✅ keep “glass” arbitrary utilities from being purged in prod
+  safelist: [
+    // arbitrary background + box-shadow + mask-image we used for the glass look
+    { pattern: /\[background-image:.*\]/ },
+    { pattern: /\[box-shadow:.*\]/ },
+    { pattern: /\[mask-image:.*\]/ },
+    // support-variant with backdrop-filter (exact class we used)
+    "supports-[backdrop-filter]:backdrop-saturate-150",
+  ],
+
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", ...defaultTheme.fontFamily.sans],
-        mono: ["var(--font-geist-mono)", "monospace"],
-      },
+  sans: ["Sora", "var(--font-inter)", ...defaultTheme.fontFamily.sans],
+  mono: ["var(--font-geist-mono)", "monospace"],
+},
 
       /* —— your AI palette (unchanged) —— */
       colors: {
-        darkBg: "#0d0d0d",
+        darkBg: "#000000ff",
         cardBg: "#131315",
         neonPink: "#ff4da6",
         neonPurple: "#9f6eff",
@@ -26,7 +37,7 @@ export default {
         borderDark: "#2c2c2c",
         glassBg: "rgba(255, 255, 255, 0.05)",
 
-        background: "#0d0d0d",
+        background: "#000000ff",
         foreground: "#f5f5f5",
 
         card: {
@@ -40,17 +51,17 @@ export default {
         },
 
         primary: {
-          DEFAULT: "#8b5cf6", // indigo/violet
+          DEFAULT: "#383737ff",
           foreground: "#ffffff",
         },
 
         secondary: {
-          DEFAULT: "#27272a",
+          DEFAULT: "#050505ff",
           foreground: "#ffffff",
         },
 
         accent: {
-          DEFAULT: "#1e1e21",
+          DEFAULT: "#000000ff",
           foreground: "#ffffff",
         },
 
@@ -124,7 +135,7 @@ export default {
     themes: [
       {
         mytheme: {
-          primary: "#8b5cf6",
+          primary: "#000000ff",
           secondary: "#27272a",
           accent: "#1e1e21",
           neutral: "#131315",

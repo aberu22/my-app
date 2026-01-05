@@ -1,17 +1,29 @@
+import { Inter } from "next/font/google";
+import CreateSidebar from "../components/CreateSidebar";
+
 export const metadata = {
-  title: "Create AI Images | NeonVision.AI",
-  description: "Generate stunning images from text prompts using advanced AI models.",
-  keywords: ["AI image generator", "create AI visuals", "text to image", "NeonVision AI"],
-  metadataBase: new URL("https://yourdomain.com"), // Replace with your real production domain
+  title: "AI Image Generator | Create Images from Text – Fantasy AI",
+  description:
+    "Generate high-quality AI images from text prompts in seconds. Fantasy AI is a powerful text-to-image generator for creators and teams.",
+  metadataBase: new URL("https://fantasyai.com"),
   openGraph: {
-    title: "Create AI Images | NeonVision.AI",
-    description: "Use templates or custom prompts to generate high-quality images instantly.",
-    url: "/create", // Relative URL, resolves properly with metadataBase
+    title: "AI Image Generator | Fantasy AI",
+    url: "https://fantasyai.com/create",
     type: "website",
   },
 };
 
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+
 export default function CreateLayout({ children }) {
-  
-  return <>{children}</>;
+  return (
+    <div className={`min-h-screen bg-[#0a0b0f] text-white ${inter.className}`}>
+      <CreateSidebar />
+
+      {/* main content offset for sidebar */}
+      <div className="sm:pl-72">
+        {children}
+      </div>
+    </div>
+  );
 }

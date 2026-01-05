@@ -1,398 +1,1754 @@
-"use client";
-import { createContext, useContext, useState, useEffect } from "react";
-import { generateImage, fetchUpscalers, fetchModels, setOptions,fetchLatentUpscaleModes} from "../app/utils/api"; 
-import { useAuth } from "./AuthContext"; 
-import { db, storage } from "@/lib/firebase";
-import { collection, getDoc, addDoc, serverTimestamp, query, where, onSnapshot, doc,deleteDoc } from "firebase/firestore";
-import { ref, uploadString, getDownloadURL,deleteObject } from "firebase/storage";
-import UpgradePopup from "@/app/components/UpgradePopup";
-import { increment , runTransaction} from "firebase/firestore";
-import { generateVideo, checkVideoStatus, cancelComfyJob,generateTextVideo } from "@/app/utils/api";
-import { useRef } from "react";
-import {  getPersistedJob,persistJob,clearPersistedJob } from "@/app/components/jobPersist";
+'use client';
+
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import {
+  generateImage,
+  fetchUpscalers,
+  fetchModels,
+  setOptions,
+  fetchLatentUpscaleModes,
+  generateVideo,
+  checkVideoStatus,
+  cancelComfyJob,
+  generateTextVideo,
+  fetchSamplers,
+} from '@/app/utils/api';
+import { useAuth } from './AuthContext';
+import { db, storage } from '@/lib/firebase';
+import {
+  collection,
+  getDoc,
+  addDoc,
+  serverTimestamp,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  deleteDoc,
+  increment,
+  runTransaction,
+  orderBy,              // 👈 NEW: used for videos listener
+} from 'firebase/firestore';
+import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
+import UpgradePopup from '@/app/components/UpgradePopup';
+import { updateDoc } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 
-
-
+// ---- Context
 const ImageGenerationContext = createContext();
 
-export const ImageGenerationProvider = ({ children }) => {
-
-
-
-  //asspect ratio state
-
+// ---- Aspect ratio map
 const aspectRatioMap = {
-  // Common aspect ratios
-  "1:1": { width: 512, height: 512 },
-  "4:3": { width: 1024, height: 768 },
-  "3:2": { width: 960, height: 640 },
-  "2:3": { width: 640, height: 960 },
-  "3:4": { width: 768, height: 1024 },
-  "16:9": { width: 1280, height: 720 },
-  "21:9": { width: 1440, height: 600 },
-  "9:16": { width: 720, height: 1280 },
-
-  // Additional presets
-  "512x768": { width: 512, height: 768 },
-  "768x512": { width: 768, height: 512 },
-  "1024x1024": { width: 1024, height: 1024 }, // <-- Added this line
-  "1024x2024": { width: 1024, height: 2024 },
-
-  // Safe HD cap
-  "HD 1080p": { width: 1920, height: 1080 },
+  '1:1': { width: 512, height: 512 },
+  '4:3': { width: 1024, height: 768 },
+  '3:2': { width: 960, height: 640 },
+  '2:3': { width: 640, height: 960 },
+  '3:4': { width: 768, height: 1024 },
+  '16:9': { width: 1280, height: 720 },
+  '21:9': { width: 1440, height: 600 },
+  '9:16': { width: 720, height: 1280 },
+  '512x768': { width: 512, height: 768 },
+  '768x512': { width: 768, height: 512 },
+  '1024x1024': { width: 1024, height: 1024 },
+  '1024x2024': { width: 1024, height: 2024 },
+  'HD 1080p': { width: 1920, height: 1080 },
 };
 
-
-
-  // 🔹 State Variables
-  const [prompt, setPrompt] = useState("");
-  const [negativePrompt, setNegativePrompt] = useState("");
+export const ImageGenerationProvider = ({ children }) => {
+  // ---------- Core state ----------
+  const [prompt, setPrompt] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('');
   const [generatedImages, setGeneratedImages] = useState([]);
+  const [generatedVideos, setGeneratedVideos] = useState([]); // videos are synced from Firestore
+
   const [selectedModel, setSelectedModel] = useState(null);
   const [selectedSampler, setSelectedSampler] = useState(null);
   const [selectedUpscaler, setSelectedUpscaler] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [selectedLora, setSelectedLora] = useState(null);
+
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedMetadata, setSelectedMetadata] = useState(null);
-  const [credits, setCredits] = useState(null);  // 🔹 Set to `null` to avoid flashes
+
+  const [credits, setCredits] = useState(null);
+  const [membershipStatus, setMembershipStatus] = useState('free');
+
+  const [loading, setLoading] = useState(false);
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
-  const [upscalers, setUpscalers] = useState([]);
-  const [models, setModels] = useState([]);
-  const [membershipStatus, setMembershipStatus] = useState("free"); // ✅ Fix: Define state
-  const [latentUpscalers, setLatentUpscalers] = useState([]);
-  const [selectedLatentUpscaler, setSelectedLatentUpscaler] = useState(null);
-  const [allUpscalers, setAllUpscalers] = useState([]);
   const [error, setError] = useState(null);
+
+  // models & upscalers
+  const [models, setModels] = useState([]);
+  const [upscalers, setUpscalers] = useState([]);
+  const [latentUpscalers, setLatentUpscalers] = useState([]);
+  const [allUpscalers, setAllUpscalers] = useState([]);
+  const [selectedLatentUpscaler, setSelectedLatentUpscaler] = useState(null);
+
+  // Samplers
+  const [samplers, setSamplers] = useState([]);
+  const [samplersLoading, setSamplersLoading] = useState(false);
+  const [samplersError, setSamplersError] = useState(null);
+
+  // params
+  const [steps, setSteps] = useState(20);
+  const [cfgScale, setCfgScale] = useState(7);
+  const [seed, setSeed] = useState(-1);
+  const [batchSize, setBatchSize] = useState(1);
+  const [batchCount, setBatchCount] = useState(1);
+
+  // resolution
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1');
+  const [imageResolution, setImageResolution] = useState(aspectRatioMap['1:1']);
+  const { width, height } = imageResolution;
+
+  // video job state
+  const [mode, setMode] = useState('image'); // 'image' | 'video'
   const [videoUrl, setVideoUrl] = useState(null);
-  const [mode, setMode] = useState("image"); // "image" or "video"
   const [progressText, setProgressText] = useState(null);
   const [progressPercent, setProgressPercent] = useState(null);
   const [currentJobId, setCurrentJobId] = useState(null);
-  // in ImageGenerationContext (top-level state)
-const [jobActive, setJobActive] = useState(false);
-
-  
-
-    const latestVideoRef = useRef(null);
-    const pollHandleRef = useRef(null);   // ✅ inside the component
-    const isActiveRef    = useRef(true);   // ✅ add this here
-    const currentJobIdRef = useRef(null);
-
-    const isMine = (id) => currentJobIdRef.current && currentJobIdRef.current === id;
+  const [jobActive, setJobActive] = useState(false);
+  const [etaTargetMs, setEtaTargetMs] = useState(null);
+  const [videoModel, setVideoModel] = useState("wan-2.2");
 
 
-    // top of provider component (next to your other refs)
 
 
-// keep this component "alive" flag updated
+  // refs
+  const latestVideoRef = useRef(null);
+  const pollHandleRef = useRef(null);
+  const isActiveRef = useRef(true);
+  const currentJobIdRef = useRef(null);
+  const isMine = (id) => currentJobIdRef.current && currentJobIdRef.current === id;
+  const lastSeedanceMetaRef = useRef(null);
+  const lastWan26MetaRef = useRef(null);
+  const { getIdToken, user } = useAuth();
+  const seedancePollingTaskRef = useRef(null);
+
+// shape: { model: "wan-2.2" | "wan-2.6" | "seedance", jobId }
+
+
+  //non shared refs
+  const pollingIntervalRef = useRef(null);
+  const realtimeUnsubRef = useRef(null);
+
+// ✅ Dedicated Wan 2.6 polling ref (DO NOT reuse pollHandleRef)
+const wan26PollingRef = useRef(null);
+
+
+
+
+
+
+  const listenerTokenRef = useRef(0);
+
+
+  useEffect(() => {
+    isActiveRef.current = true;
+    return () => {
+      isActiveRef.current = false;
+      if (pollHandleRef.current?.cancel) {
+        pollHandleRef.current.cancel();
+        pollHandleRef.current = null;
+      }
+    };
+  }, []);
+
+  // ---------- Firestore listeners ----------
+
+  // Images
+// Images
 useEffect(() => {
-  isActiveRef.current = true;
-  return () => {
-    isActiveRef.current = false;
-    if (pollHandleRef.current?.cancel) {
-      pollHandleRef.current.cancel();
-      pollHandleRef.current = null;
+  if (!user?.uid) return;
+
+  const q = query(
+    collection(db, 'images'),
+    where('userId', '==', user.uid),
+    orderBy('createdAt', 'desc')   // 👈 NEW: newest image ALWAYS first
+  );
+
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const images = snapshot.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        createdAt: data.createdAt || null,
+      };
+    });
+
+    setGeneratedImages(images);
+  });
+
+  return () => unsubscribe();
+}, [user?.uid]);
+
+
+
+
+
+  // 🔵 Videos (i2v + t2v) – this is the new listener you asked for
+  useEffect(() => {
+    if (!user?.uid) {
+      setGeneratedVideos([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'videos'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const vids = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            // normalize timestamps for UI if needed
+            createdAt: data.createdAt || null,
+          };
+        });
+        setGeneratedVideos(vids);
+      },
+      (err) => {
+        console.error('videos onSnapshot error:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  // user doc -> credits & membership
+  useEffect(() => {
+    if (!user?.uid) return;
+    const userRef = doc(db, 'users', user.uid);
+    const unsub = onSnapshot(userRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setCredits(data.credits ?? 50);
+        setMembershipStatus(data.membershipStatus ?? 'free');
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  // load models (filter NSFW for free)
+  useEffect(() => {
+    const load = async () => {
+      const all = await fetchModels();
+      const filtered =
+        membershipStatus === 'free'
+          ? all.filter((m) => !(m.tags || []).includes('NSFW'))
+          : all;
+      setModels(filtered);
+    };
+    if (membershipStatus) load();
+  }, [membershipStatus]);
+
+  // load upscalers (standard + latent)
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const [standard, latent] = await Promise.all([
+          fetchUpscalers(),
+          fetchLatentUpscaleModes(),
+        ]);
+
+        if (!mounted) return;
+
+        const std = Array.isArray(standard)
+          ? standard.map((u) => ({ name: u.name, type: 'standard' }))
+          : [];
+        const lat = Array.isArray(latent)
+          ? latent.map((u) => ({ name: u.name, type: 'latent' }))
+          : [];
+
+        setUpscalers(std);
+        setLatentUpscalers(lat);
+        setAllUpscalers([...lat, ...std]);
+
+        if (!selectedUpscaler && std.length > 0) {
+          setSelectedUpscaler(std[0].name);
+        }
+        if (!selectedLatentUpscaler && lat.length > 0) {
+          setSelectedLatentUpscaler(lat[0].name);
+        }
+      } catch (e) {
+        console.error('Failed to load upscalers:', e);
+        setUpscalers([]);
+        setLatentUpscalers([]);
+        setAllUpscalers([]);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // run once
+
+  // ---------- Helpers ----------
+  const handleAspectRatioChange = (ratio) => {
+    setSelectedAspectRatio(ratio);
+    setImageResolution(aspectRatioMap[ratio]);
+  };
+
+  const deleteImage = async (imageId) => {
+    if (!imageId) return;
+    try {
+      const imageRef = doc(db, 'images', imageId);
+      const snap = await getDoc(imageRef);
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+      const imageUrl = data.imageUrl;
+      const storagePath = imageUrl.startsWith('https://firebasestorage.googleapis.com')
+        ? decodeURIComponent(imageUrl.split('/o/')[1].split('?alt=media')[0])
+        : imageUrl;
+
+      const storageRef = ref(storage, storagePath);
+      await deleteObject(storageRef).catch((e) => {
+        if (e.code !== 'storage/object-not-found') throw e;
+      });
+      await deleteDoc(imageRef);
+    } catch (e) {
+      console.error('Delete failed:', e);
+      alert('❌ Failed to delete image.');
     }
   };
+
+  // ---------- Samplers ----------
+  const reloadSamplers = useCallback(async () => {
+    setSamplersLoading(true);
+    setSamplersError(null);
+    try {
+      const fetched = await fetchSamplers();
+      if (!Array.isArray(fetched)) throw new Error('Invalid sampler list');
+      setSamplers(fetched);
+    } catch (err) {
+      console.error('Error fetching samplers:', err);
+      setSamplersError('Failed to load samplers');
+    } finally {
+      setSamplersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadSamplers();
+  }, []); // one-time
+
+  useEffect(() => {
+    if (!selectedSampler && samplers.length > 0) {
+      setSelectedSampler(samplers[0].name);
+    }
+  }, [samplers, selectedSampler, setSelectedSampler]);
+
+  // ---------- Image generation ----------
+  const onGenerateImage = useCallback(async () => {
+    try {
+      if (!user?.uid) return alert('Please sign in to generate images.');
+      if (!prompt.trim()) return alert('⚠️ Please enter a prompt.');
+      if (!selectedModel?.title || !selectedSampler) {
+        return alert('⚠️ Pick a model and a sampler first.');
+      }
+      if ((credits ?? 0) <= 0) {
+        setShowUpgradePopup(true);
+        return;
+      }
+
+      const isNSFW =
+        selectedModel?.tags?.includes('NSFW') ||
+        selectedLora?.name?.toLowerCase?.().includes('nsfw');
+      if (isNSFW && membershipStatus === 'free') {
+        return alert('⚠️ NSFW content is only for premium members.');
+      }
+
+      setLoading(true);
+
+      const metadata = {
+        prompt,
+        negative_prompt: negativePrompt,
+        width,
+        height,
+        steps,
+        sampler_name: selectedSampler,
+        upscaler: selectedUpscaler?.name || null,
+        sd_model_checkpoint: selectedModel.title,
+        cfg_scale: cfgScale,
+        seed,
+        batch_size: batchSize,
+        n_iter: batchCount,
+        restore_faces: true,
+        tiling: false,
+        send_images: true,
+        save_images: false,
+        lora: selectedLora?.name || null,
+        hr_scale: 2.0,
+        hr_upscaler: selectedUpscaler?.name || 'Latent',
+        denoising_strength: 0.4,
+        latent_upscaler: selectedLatentUpscaler?.name || selectedLatentUpscaler || null,
+      };
+
+      console.log("🚀 Sending payload to API:", JSON.stringify(metadata, null, 2));
+
+      await setOptions({ sd_model_checkpoint: selectedModel.title });
+      await new Promise((r) => setTimeout(r, 4000));
+
+      const response = await generateImage(metadata);
+      if (!response?.images?.length) throw new Error('API returned no images.');
+
+      const total = response.images.length;
+      const userRef = doc(db, 'users', user.uid);
+
+      for (const base64 of response.images) {
+        const base64Image = `data:image/png;base64,${base64}`;
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${user.uid}.png`;
+        const storagePath = `images/${user.uid}/${fileName}`;
+        const imageRef = ref(storage, storagePath);
+        await uploadString(imageRef, base64Image, 'data_url');
+        const downloadURL = await getDownloadURL(imageRef);
+
+        await addDoc(collection(db, 'images'), {
+          userId: user.uid,
+          username: user.displayName || 'Anonymous',
+          avatar: user.photoURL || '/default-avatar.png',
+          imageUrl: downloadURL,
+          storagePath,
+          prompt: prompt || 'N/A',
+          negativePrompt: negativePrompt || 'N/A',
+          modelType: selectedModel?.title || 'default',
+          ...metadata,
+          isPublic: false,
+          likes: 0,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userRef);
+        if (!snap.exists()) throw new Error('User doc missing.');
+        const current = snap.data().credits ?? 0;
+        if (current < total) throw new Error('Not enough credits.');
+        tx.update(userRef, { credits: increment(-total) });
+        setCredits(current - total);
+      });
+    } catch (err) {
+      console.error('Image generation failed:', err);
+      alert(err?.message || 'Unexpected error occurred.');
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    user, prompt, negativePrompt, width, height, steps, selectedSampler,
+    selectedUpscaler, selectedModel, cfgScale, seed, batchSize, batchCount,
+    selectedLora, selectedLatentUpscaler, credits, membershipStatus,
+  ]);
+
+  // ---------- Cleanup job state ----------
+
+ // Cleanup job state
+  // ---------- Cleanup job state ----------
+// ---------- Cleanup job state ----------
+const cleanupJobState = useCallback(() => {
+  // 🛑 Stop realtime listener
+  if (realtimeUnsubRef.current) {
+    realtimeUnsubRef.current();
+    realtimeUnsubRef.current = null;
+  }
+
+  // 🛑 Stop Wan 2.6 polling
+  if (wan26PollingRef.current) {
+    clearInterval(wan26PollingRef.current);
+    wan26PollingRef.current = null;
+  }
+
+  // 🛑 Stop any legacy polling
+  if (pollHandleRef.current) {
+    clearInterval(pollHandleRef.current);
+    pollHandleRef.current = null;
+  }
+
+  setJobActive(false);
+  setLoading(false);
+  setProgressText(null);
+  setProgressPercent(null);
+  setVideoUrl(null);
+
+  setCurrentJobId(null);
+  currentJobIdRef.current = null;
 }, []);
 
 
 
-  useEffect(() => {
-    const loadUpscalers = async () => {
-      const [standard, latent] = await Promise.all([
-        fetchUpscalers(),
-        fetchLatentUpscaleModes(),
-      ]);
-  
-      setUpscalers(standard);
-      setLatentUpscalers(latent);
-  
-      const merged = [
-        ...latent.map((u) => ({ name: u.name, type: "latent" })),
-        ...standard.map((u) => ({ name: u.name, type: "standard" })),
-      ];
-  
-      setAllUpscalers(merged);
-      setSelectedUpscaler(merged[0]?.type === "standard" ? merged[0] : null);
-      setSelectedLatentUpscaler(merged[0]?.type === "latent" ? merged[0] : null);
-    };
-  
-    loadUpscalers();
-  }, []);
-
- 
-
-const [steps, setSteps] = useState(20);
-const [cfgScale, setCfgScale] = useState(7);
-const [seed, setSeed] = useState(-1);
-const [batchSize, setBatchSize] = useState(1);
-const [batchCount, setBatchCount] = useState(1)
-const [generatedVideos, setGeneratedVideos] = useState([]);
-
-console.log("🔍 Available Upscalers:", upscalers);
 
 
+// ----------------------------------------------------------------------
+// Seedance polling (HTTP-based, no Firestore)
+// ----------------------------------------------------------------------
 
-  // 🔸 Aspect Ratio Selection & Resolution State
-  const [selectedAspectRatio, setSelectedAspectRatio] = useState("1:1");
-  const [imageResolution, setImageResolution] = useState(aspectRatioMap["1:1"]);
-  const { width, height } = imageResolution;
+// ----------------------------------------------------------------------
+// Seedance polling (HTTP-based, no Firestore)
+// ----------------------------------------------------------------------
 
-const handleAspectRatioChange = (ratio) => {
-  setSelectedAspectRatio(ratio);
-  setImageResolution(aspectRatioMap[ratio]);
-};
-
-
-
-
-
-  const { getIdToken, user } = useAuth();
- 
-
-  
+// ----------------------------------------------------------------------
+// Seedance polling (HTTP-based, with Firestore), Restore polling on refresh
+// ----------------------------------------------------------------------
 
 
 
 
 
 
-  useEffect(() => {
-    if (!user?.uid) return;
-  
-    const q = query(collection(db, "images"), where("userId", "==", user.uid));
-  
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log("🔥 Firestore snapshot triggered!");
-  
-      const images = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-  
-      console.log("📸 Firestore Updated Images:", images);
-      setGeneratedImages(images);
-    });
-  
-    return () => unsubscribe();
-  }, [user?.uid]); // ✅ More precise dependency
-  
+const startSeedancePolling = useCallback(
+  (taskId, mode = "text") => {
+    if (!taskId) return;
 
-
-  //delete image in firestone
-  
-  const deleteImage = async (imageId) => {
-    if (!imageId) {
-      console.warn("⚠️ No image ID found, skipping delete.");
+    // 🔒 Prevent duplicate polling
+    if (seedancePollingTaskRef.current === taskId) {
+      console.log("🛑 Seedance polling already active for:", taskId);
       return;
     }
-  
-    console.log("🗑 Deleting image with ID:", imageId);
-  
+
+    seedancePollingTaskRef.current = taskId;
+
+    // Clear previous poll
+    if (pollHandleRef.current) {
+      clearInterval(pollHandleRef.current);
+      pollHandleRef.current = null;
+    }
+
+    setJobActive(true);
+    setProgressText("⏳ Seedance rendering…");
+    setProgressPercent(10);
+
+    const pollUrl =
+      mode === "image"
+        ? "/api/videoapi/generate-image-video-seedance"
+        : "/api/videoapi/generate-text-video-seedance";
+
+    pollHandleRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${pollUrl}?taskId=${taskId}`);
+        if (!res.ok) {
+          throw new Error(`Polling failed (${res.status})`);
+        }
+
+        const json = await res.json();
+        const data = json?.data;
+        if (!data) return;
+
+        /* ---------------- WAITING ---------------- */
+        if (data.state === "waiting") {
+          setProgressPercent((p) =>
+            Math.min((p || 10) + Math.random() * 6, 92)
+          );
+          return;
+        }
+
+        /* ---------------- FAIL ---------------- */
+        if (data.state === "fail") {
+          throw new Error(data.failMsg || "Seedance job failed");
+        }
+
+        /* ---------------- SUCCESS ---------------- */
+        if (data.state === "success") {
+          clearInterval(pollHandleRef.current);
+          pollHandleRef.current = null;
+          seedancePollingTaskRef.current = null;
+
+          const result =
+            typeof data.resultJson === "string"
+              ? JSON.parse(data.resultJson)
+              : data.resultJson;
+
+          const videoUrl = result?.resultUrls?.[0];
+          if (!videoUrl) {
+            throw new Error("Seedance returned no video URL");
+          }
+
+          const auth = getAuth();
+          const currentUser = auth.currentUser;
+          if (!currentUser?.uid) {
+            cleanupJobState();
+            return;
+          }
+
+          await addDoc(collection(db, "videos"), {
+            userId: currentUser.uid,
+            jobId: taskId,
+            videoUrl,
+            prompt: lastSeedanceMetaRef.current?.prompt || "",
+            model: "seedance",
+            status: "ready",
+            createdAt: serverTimestamp(),
+            isPublic: false,
+          });
+
+          // 🔥 CRITICAL: clear persisted job
+          localStorage.removeItem("active_external_job");
+
+          setProgressText("✅ Seedance complete");
+          setProgressPercent(100);
+
+          cleanupJobState();
+        }
+      } catch (err) {
+        console.error("Seedance polling error:", err);
+
+        localStorage.removeItem("active_external_job");
+
+        clearInterval(pollHandleRef.current);
+        pollHandleRef.current = null;
+        seedancePollingTaskRef.current = null;
+
+        setError(err.message || "Seedance polling failed");
+        cleanupJobState();
+      }
+    }, 2500);
+  },
+  [cleanupJobState, setError]
+);
+
+//end of Restore polling on refresh and startSeedancePolling 
+
+//wanPolling 
+
+// ----------------------------------------------------------------------
+// Wan 2.6 polling (TEXT + IMAGE SAFE, Seedance-style)
+// ----------------------------------------------------------------------
+const startWan26Polling = useCallback(
+  (taskId, kind = "t2v") => {
+    if (!taskId) return;
+
+    // 🛑 Kill any existing Wan 2.6 poll
+    if (wan26PollingRef.current) {
+      clearInterval(wan26PollingRef.current);
+      wan26PollingRef.current = null;
+    }
+
+    console.log("🟣 START WAN 2.6 POLLING", { taskId, kind });
+
+    setJobActive(true);
+    setProgressText("⏳ Wan 2.6 rendering…");
+    setProgressPercent((p) => (typeof p === "number" ? p : 10));
+
+    wan26PollingRef.current = setInterval(async () => {
+      try {
+        // ✅ CRITICAL FIX: choose correct polling endpoint
+        const pollUrl =
+          kind === "i2v"
+            ? `/api/videoapi/generate-image-video-wan26?taskId=${taskId}`
+            : `/api/videoapi/generate-text-video-wan26?taskId=${taskId}`;
+
+        const res = await fetch(pollUrl);
+
+        if (!res.ok) {
+          throw new Error(`Wan 2.6 polling failed (${res.status})`);
+        }
+
+        const json = await res.json();
+        const data = json?.data;
+        if (!data) return;
+
+        const state = data.state;
+
+        // ----------------------------
+        // ❌ FAILURE
+        // ----------------------------
+        if (state === "fail" || state === "error") {
+          throw new Error(data.failMsg || "Wan 2.6 job failed");
+        }
+
+        // ----------------------------
+        // ✅ SUCCESS
+        // ----------------------------
+
+        if (state === "success") {
+  const result =
+    typeof data.resultJson === "string"
+      ? JSON.parse(data.resultJson)
+      : data.resultJson;
+
+  const videoUrl = result?.resultUrls?.[0];
+
+  // 🔒 CRITICAL FIX
+  if (!videoUrl) {
+    console.warn(
+      "Wan 2.6 success but video not ready yet — continuing polling"
+    );
+    return; // ⛔ DO NOT cleanup, DO NOT clear interval
+  }
+
+  // ✅ NOW we are actually done
+  clearInterval(wan26PollingRef.current);
+  wan26PollingRef.current = null;
+
+  console.log("✅ WAN 2.6 COMPLETE:", videoUrl);
+
+  setProgressPercent(100);
+  setProgressText("✅ Wan 2.6 complete");
+
+  const meta = lastWan26MetaRef.current;
+  if (meta?.userId) {
+    await addDoc(collection(db, "videos"), {
+      userId: meta.userId,
+      jobId: taskId,
+      videoUrl,
+      prompt: meta.prompt || "",
+      model: "wan-2.6",
+      duration: meta.duration || "5",
+      resolution: meta.resolution || "720p",
+      status: "ready",
+      createdAt: serverTimestamp(),
+    });
+  }
+
+  localStorage.removeItem("active_external_job");
+  cleanupJobState();
+}
+
+       
+
+        // ----------------------------
+        // ⏳ PROGRESS
+        // ----------------------------
+        setProgressText("⏳ Wan 2.6 rendering…");
+        setProgressPercent((prev) => {
+          if (typeof prev !== "number") return 10;
+          return Math.min(prev + 4, 92);
+        });
+
+      } catch (err) {
+        console.error("❌ Wan 2.6 polling error:", err);
+
+        if (wan26PollingRef.current) {
+          clearInterval(wan26PollingRef.current);
+          wan26PollingRef.current = null;
+        }
+
+        setError(err.message || "Wan 2.6 polling failed");
+        cleanupJobState();
+      }
+    }, 2500);
+  },
+  [cleanupJobState, setError]
+);
+
+
+
+
+
+// end of wan polling
+
+
+// start useeffect for wan2.6 and seedance 
+
+
+// 2️⃣ THEN restore effect (AFTER callbacks exist)
+useEffect(() => {
+  if (!user) return;
+
+  const raw = localStorage.getItem("active_external_job");
+  if (!raw) return;
+
+  let job;
+  try {
+    job = JSON.parse(raw);
+  } catch {
+    localStorage.removeItem("active_external_job");
+    return;
+  }
+
+  if (!job?.provider || !job?.taskId) return;
+
+  // 🔍 DEBUG — SINGLE SOURCE OF TRUTH
+  console.log("POLLING MODEL:", job.provider, "TASK:", job.taskId);
+
+  setJobActive(true);
+  setLoading(true);
+  setProgressText("🔄 Restoring render…");
+  setProgressPercent(10);
+
+  setCurrentJobId(job.taskId);
+  currentJobIdRef.current = job.taskId;
+
+  if (job.provider === "wan-2.6") {
+  if (job.meta) {
+    lastWan26MetaRef.current = job.meta; // 🔥 REQUIRED
+  }
+  startWan26Polling(job.taskId, job.kind || "t2v");
+  return;
+}
+
+
+  if (job.provider === "seedance") {
+    startSeedancePolling(job.taskId);
+    return;
+  }
+
+  // 🚫 NO FALLBACK
+}, [user, startSeedancePolling, startWan26Polling]);
+
+
+
+
+
+
+ // ----------------------------------------------------------------------
+//  REALTIME JOB LISTENER (Kling-style)
+// ----------------------------------------------------------------------
+
+// ----------------------------------------------------------------------
+//  REALTIME JOB LISTENER (Kling-style, per-job, with isMine guard)
+// ----------------------------------------------------------------------
+
+
+const startRealtimeJobListener = useCallback(
+  (jobId) => {
+    if (!user?.uid || !jobId) return;
+
+    console.log("🔴 Starting realtime listener for job:", jobId);
+
+    // ---- Invalidate old listeners
+    listenerTokenRef.current += 1;
+    const token = listenerTokenRef.current;
+
+    // ---- Set active job
+    setCurrentJobId(jobId);
+    currentJobIdRef.current = jobId;
+
+    // 🛑 Kill any existing realtime listener FIRST
+    if (realtimeUnsubRef.current) {
+      try {
+        realtimeUnsubRef.current();
+      } catch (e) {
+        console.warn("⚠️ Failed to unsubscribe previous realtime listener", e);
+      }
+      realtimeUnsubRef.current = null;
+    }
+
+    const jobRef = doc(db, "jobs", jobId);
+
+    const unsubscribe = onSnapshot(
+      jobRef,
+      (snap) => {
+        // ---- Ignore stale listeners
+        if (token !== listenerTokenRef.current) return;
+
+        if (!snap.exists()) {
+          console.warn("⚠️ Job doc missing, cleaning up:", jobId);
+          unsubscribe();
+          realtimeUnsubRef.current = null;
+          cleanupJobState();
+          return;
+        }
+
+        const data = snap.data();
+
+        // ---- Extra guard: job switched
+        if (currentJobIdRef.current !== jobId) return;
+
+        // ---------- QUEUED ----------
+        if (data.status === "queued") {
+          setProgressText("📦 In queue…");
+          setProgressPercent(5);
+          return;
+        }
+
+        // ---------- PROCESSING ----------
+        if (data.status === "processing") {
+          setProgressText(data.stage || "🎬 Rendering…");
+
+          // ✅ SMOOTH PROGRESS (real if provided, otherwise simulated)
+          setProgressPercent((prev) => {
+            if (typeof data.progress === "number") return data.progress;
+            if (prev == null) return 20;
+            return Math.min(prev + 2, 90);
+          });
+
+          return;
+        }
+
+        // ---------- COMPLETE ----------
+        if (data.status === "complete" && data.videoUrl) {
+          console.log("🎉 VIDEO READY:", data.videoUrl);
+
+          setVideoUrl(data.videoUrl);
+          setProgressText("✅ Video complete!");
+          setProgressPercent(100);
+
+          // 🛑 Stop listener BEFORE cleanup
+          unsubscribe();
+          realtimeUnsubRef.current = null;
+
+          cleanupJobState();
+          return;
+        }
+
+        // ---------- ERROR ----------
+        if (data.status === "error") {
+          console.error("❌ Job error:", data.error);
+
+          setProgressText("❌ Job failed.");
+          setError(data.error || "Job failed.");
+          setProgressPercent(null);
+
+          unsubscribe();
+          realtimeUnsubRef.current = null;
+
+          cleanupJobState();
+          return;
+        }
+
+        // ---------- CANCELLED ----------
+        if (data.status === "cancelled") {
+          console.log("🚫 Job cancelled");
+
+          setProgressText("❌ Job cancelled.");
+          setProgressPercent(null);
+
+          unsubscribe();
+          realtimeUnsubRef.current = null;
+
+          cleanupJobState();
+          return;
+        }
+      },
+      (err) => {
+        if (token !== listenerTokenRef.current) return;
+        console.error("🔥 Realtime listener error:", err);
+      }
+    );
+
+    // ✅ Store unsubscribe safely
+    realtimeUnsubRef.current = unsubscribe;
+  },
+  [user, cleanupJobState]
+);
+
+
+
+
+
+
+
+
+
+  // ---------- Video: I2V ----------
+ // ---------- Video: I2V ----------
+// ---------- Video: I2V ----------
+const onGenerateVideo = useCallback(
+  async ({
+    imageFile,
+    prompt: vPrompt,
+    negative_prompt = "",
+    user_high_loras = [],
+    user_high_strengths = [],
+    user_low_loras = [],
+    user_low_strengths = [],
+    fps = 20,
+    duration = 6,
+   
+  }) => {
     try {
-      const imageRef = doc(db, "images", imageId);
-      const imageSnap = await getDoc(imageRef);
-  
-      if (!imageSnap.exists()) {
-        console.warn("🚨 Image already deleted from Firestore!");
+      // -------- Guards --------
+      if (!user) return setError("Please log in.");
+      if (!imageFile) return setError("Reference image required.");
+      if (!vPrompt.trim()) return setError("Prompt required.");
+      if ((credits ?? 0) <= 0) {
+        setShowUpgradePopup(true);
         return;
       }
-  
-      const imageData = imageSnap.data();
-      const imageUrl = imageData.imageUrl;
+
+      // -------- UI State --------
+      setJobActive(true);
+      setLoading(true);
+      setProgressText("🚀 Submitting image-to-video job…");
+      setProgressPercent(1);
+
+      const token = await getIdToken();
+
+      // -------- Prompt (already merged with triggers in UI) --------
+      const sendPrompt = vPrompt.trim();
+
+      // 🔍 TEMP DEBUG (remove after validation)
+      console.log("🎯 I2V LoRA payload", {
+        user_high_loras,
+        user_high_strengths,
+        user_low_loras,
+        user_low_strengths,
+      });
+
+      // -------- Submit to backend --------
+      const start = await generateVideo({
+        imageFile,
+        prompt: sendPrompt,
+        negative_prompt,
+        user_high_loras,
+        user_high_strengths,
+        user_low_loras,
+        user_low_strengths,
+        fps,
+        duration,
+        token,
+      });
+
+      const jobId = start?.job_id;
+      if (!jobId) throw new Error("No job_id returned.");
+
+      console.log("🎬 I2V job submitted:", jobId);
+
+      setCurrentJobId(jobId);
+      currentJobIdRef.current = jobId;
+
+      // Persist job for auto-restore
+      localStorage.setItem(
+        "active_video_job",
+        JSON.stringify({
+          id: jobId,
+          kind: "i2v",
+          prompt: sendPrompt,
+          fps,
+          duration,
+          startedAt: Date.now(),
+        })
+      );
+
+      // -------- START REALTIME TRACKING --------
+      startRealtimeJobListener(jobId);
+
+    } catch (err) {
+      console.error("❌ I2V generation failed:", err);
+      setError(err.message || "Unexpected error.");
+      cleanupJobState();
+    }
+  },
+  [user, credits, getIdToken]
+);
+
+
+
+ // ---------- Video: T2V ----------
+
+const onGenerateTextToVideo = useCallback(
+  async ({
+    prompt: tPrompt,
+    negative_prompt = "",
+    loras = [],
+    fps = 20,
+    duration = 10,
+  }) => {
+    try {
+      // -------- Guards --------
+      if (!user) return setError("Please log in.");
+      if (!tPrompt.trim()) return setError("Prompt required.");
+      if ((credits ?? 0) <= 0) {
+        setShowUpgradePopup(true);
+        return;
+      }
+
+      // -------- Initial UI state --------
+      setJobActive(true);
+      setLoading(true);
+      setProgressText("🚀 Submitting text-to-video job…");
+      setProgressPercent(1);
+
+      const token = await getIdToken();
+      const chosen = loras.slice(0, 3);
+
+      // -------- Call backend --------
+      const resp = await generateTextVideo({
+        prompt: tPrompt,
+        negative_prompt,
+        loras: chosen,
+        fps,
+        duration,
+        token,
+      });
+
+      const jobId = resp?.job_id;
+      if (!jobId) throw new Error("No job_id returned.");
+      console.log("🎬 T2V job submitted:", jobId);
+
+      // Save active job
+      setCurrentJobId(jobId);
+      currentJobIdRef.current = jobId;
+
+      // Persist in localStorage for restore-on-refresh
+      localStorage.setItem(
+        "active_video_job",
+        JSON.stringify({
+          id: jobId,
+          kind: "t2v",
+          prompt: tPrompt,
+          fps,
+          duration,
+          startedAt: Date.now(),
+        })
+      );
+
+      // -------- START REALTIME LISTENER 🎉 --------
+      startRealtimeJobListener(jobId);
+
+    } catch (err) {
+      console.error("❌ T2V Error:", err);
+      setError(err.message || "Unexpected error.");
+      cleanupJobState();   // <-- REALTIME CLEANUP
+    }
+  },
+  [user, credits, getIdToken]
+);
+
+// Seeddance t2v'
+
+// Seedance Text-to-Video
+
+// Seedance Text-to-Video
+
+// Seedance Text-to-Video (FINAL FIXED VERSION)
+// Seedance — Text → Video
+const onGenerateSeedanceVideo = useCallback(
+  async ({
+    prompt,
+    aspect_ratio = "16:9",
+    resolution = "720p",
+    duration = "8",
+    fixed_lens = false,
+    generate_audio = true,
+  }) => {
+    try {
+      /* --------------------------------------------------
+         🔒 Prevent double billing / resume existing job
+      -------------------------------------------------- */
+      const existing = localStorage.getItem("active_external_job");
+      if (existing) {
+        try {
+          const job = JSON.parse(existing);
+          if (job?.provider === "seedance" && job?.taskId) {
+            setJobActive(true);
+            setLoading(true);
+            setProgressText("⏳ Resuming Seedance render…");
+            setProgressPercent(10);
+            startSeedancePolling(job.taskId);
+            return; // 🔥 do NOT create a new job
+          }
+        } catch {
+          localStorage.removeItem("active_external_job");
+        }
+      }
+
+      /* --------------------------------------------------
+         VALIDATION
+      -------------------------------------------------- */
+      if (!user?.uid) {
+        throw new Error("Please log in.");
+      }
+
+      const cleanPrompt = prompt?.trim();
+      if (!cleanPrompt) {
+        throw new Error("Prompt is required.");
+      }
+
+      /* --------------------------------------------------
+         NORMALIZE INPUT (Seedance spec)
+      -------------------------------------------------- */
+      const safeAspectRatio = [
+        "1:1",
+        "21:9",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16",
+      ].includes(aspect_ratio)
+        ? aspect_ratio
+        : "16:9";
+
+      const safeResolution = ["480p", "720p"].includes(resolution)
+        ? resolution
+        : "720p";
+
+      const safeDuration = ["4", "8", "12"].includes(String(duration))
+        ? String(duration)
+        : "8";
+
+      /* --------------------------------------------------
+         SAVE META (used by polling / Firestore)
+      -------------------------------------------------- */
+      lastSeedanceMetaRef.current = {
+        userId: user.uid,
+        prompt: cleanPrompt,
+        model: "seedance",
+        aspect_ratio: safeAspectRatio,
+        resolution: safeResolution,
+        duration: safeDuration,
+        createdAt: Date.now(),
+      };
+
+      /* --------------------------------------------------
+         UI STATE
+      -------------------------------------------------- */
+      setJobActive(true);
+      setLoading(true);
+      setError(null);
+      setProgressText("🚀 Submitting Seedance job…");
+      setProgressPercent(5);
+
+      /* --------------------------------------------------
+         CALL BACKEND (Seedance T2V)
+      -------------------------------------------------- */
+      const token = await getIdToken();
+
+      const res = await fetch(
+        "/api/videoapi/generate-text-video-seedance",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            prompt: cleanPrompt,
+            aspect_ratio: safeAspectRatio,
+            resolution: safeResolution,
+            duration: safeDuration,
+            fixed_lens: Boolean(fixed_lens),
+            generate_audio: Boolean(generate_audio),
+          }),
+        }
+      );
+
+      const rawText = await res.text();
+      let json;
+
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        console.error("Seedance non-JSON response:", rawText);
+        throw new Error("Seedance returned invalid JSON.");
+      }
+
+      const taskId =
+        json?.taskId ||
+        json?.task_id ||
+        json?.data?.taskId ||
+        json?.data?.task_id;
+
+      if (!res.ok || !taskId) {
+        console.error("Seedance createTask failed:", json);
+        throw new Error(json?.error || json?.msg || "Seedance createTask failed");
+      }
+
+      /* --------------------------------------------------
+         SAVE JOB FOR REFRESH RECOVERY
+      -------------------------------------------------- */
+      localStorage.setItem(
+        "active_external_job",
+        JSON.stringify({
+          provider: "seedance",
+          taskId,
+          startedAt: Date.now(),
+        })
+      );
+
+      /* --------------------------------------------------
+         START POLLING
+      -------------------------------------------------- */
+      setCurrentJobId(taskId);
+      currentJobIdRef.current = taskId;
+
+      setProgressText("⏳ Seedance rendering…");
+      setProgressPercent(15);
+
+      startSeedancePolling(taskId);
+
+    } catch (err) {
+      console.error("❌ Seedance T2V error:", err);
+
+      localStorage.removeItem("active_external_job"); // 🔥 critical cleanup
+
+      setError(err.message || "Seedance generation failed");
+      setJobActive(false);
+      setLoading(false);
+      setProgressPercent(0);
+    }
+  },
+  [user, startSeedancePolling]
+);
+
+
+
+
+//SeedDance ongenerateImage to video
+// Seedance — Image → Video
+const onGenerateSeedanceImageVideo = useCallback(
+  async ({
+    prompt,
+    imageUrl,
+    aspect_ratio = "16:9",
+    resolution = "480p",
+    duration = "8",
+    fixed_lens = false,
+    generate_audio = true,
+  }) => {
+    try {
+      /* --------------------------------------------------
+         🔒 Prevent double billing / resume existing job
+      -------------------------------------------------- */
+      const existing = localStorage.getItem("active_external_job");
+      if (existing) {
+        const job = JSON.parse(existing);
+        if (job?.provider === "seedance" && job?.taskId) {
+          setJobActive(true);
+          setLoading(true);
+          setProgressText("⏳ Resuming Seedance render…");
+          setProgressPercent(10);
+          startSeedancePolling(job.taskId);
+          return;
+        }
+      }
+
+      /* --------------------------------------------------
+         VALIDATION
+      -------------------------------------------------- */
+      if (!user?.uid) throw new Error("Please log in.");
+      if (!prompt?.trim()) throw new Error("Prompt is required.");
+      if (!imageUrl) throw new Error("Image is required for image-to-video.");
+
+      /* --------------------------------------------------
+         NORMALIZE INPUT (Seedance spec)
+      -------------------------------------------------- */
+      const safeAspectRatio = [
+        "1:1",
+        "21:9",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16",
+      ].includes(aspect_ratio)
+        ? aspect_ratio
+        : "16:9";
+
+      const safeResolution = ["480p", "720p"].includes(resolution)
+        ? resolution
+        : "480p";
+
+      const safeDuration = ["4", "8", "12"].includes(String(duration))
+        ? String(duration)
+        : "8";
+
+      /* --------------------------------------------------
+         UI STATE
+      -------------------------------------------------- */
+      setJobActive(true);
+      setLoading(true);
+      setError(null);
+      setProgressText("🖼️ Submitting image-to-video job…");
+      setProgressPercent(5);
+
+      const token = await getIdToken();
+
+      /* --------------------------------------------------
+         CALL BACKEND (Seedance I2V)
+      -------------------------------------------------- */
+      const res = await fetch(
+        "/api/videoapi/generate-image-video-seedance",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            prompt: prompt.trim(),
+            input_urls: [imageUrl], // ✅ REQUIRED BY SEEDANCE I2V
+            aspect_ratio: safeAspectRatio,
+            resolution: safeResolution,
+            duration: safeDuration,
+            fixed_lens: Boolean(fixed_lens),
+            generate_audio: Boolean(generate_audio),
+          }),
+        }
+      );
+
+      const json = await res.json();
+      const taskId =
+        json?.taskId ||
+        json?.task_id ||
+        json?.data?.taskId ||
+        json?.data?.task_id;
+
+      if (!res.ok || !taskId) {
+        throw new Error(json?.error || json?.msg || "Seedance I2V failed");
+      }
+
+      /* --------------------------------------------------
+         SAVE JOB + START POLLING
+      -------------------------------------------------- */
+      localStorage.setItem(
+        "active_external_job",
+        JSON.stringify({
+          provider: "seedance",
+          taskId,
+          startedAt: Date.now(),
+        })
+      );
+
+      setCurrentJobId(taskId);
+      setProgressPercent(15);
+      startSeedancePolling(taskId);
+
+    } catch (err) {
+      console.error("❌ Seedance I2V error:", err);
+
+      localStorage.removeItem("active_external_job"); // 🔥 important cleanup
+
+      setError(err.message || "Seedance image-to-video failed");
+      setJobActive(false);
+      setLoading(false);
+      setProgressPercent(0);
+    }
+  },
+  [user, startSeedancePolling]
+);
+
+
+// end
+
+
+
+
+// wan26 generate 
+
+
+
+// Wan 2.6 Text-to-Video (FINAL, RESTORE-SAFE VERSION)
+const onGenerateWan26Video = useCallback(
+  async ({
+    prompt,
+    duration = "5",
+    resolution = "720p",
+    multi_shots = false,
+  }) => {
+    try {
+      // --------------------------------------------------
+      // 1. Auth + input validation
+      // --------------------------------------------------
+      if (!user?.uid) {
+        throw new Error("Please log in to generate videos.");
+      }
+
+      const cleanPrompt = prompt?.trim();
+      if (!cleanPrompt) {
+        throw new Error("Prompt is required.");
+      }
+
+      // --------------------------------------------------
+      // 2. Normalize API enums (CRITICAL)
+      // --------------------------------------------------
+      const safeDuration = ["5", "10", "15"].includes(String(duration))
+        ? String(duration)
+        : "5";
+
+      const safeResolution = ["720p", "1080p"].includes(resolution)
+        ? resolution
+        : "720p";
+
+      // --------------------------------------------------
+      // 3. Save metadata EARLY (used by polling + Firestore)
+      // --------------------------------------------------
+      lastWan26MetaRef.current = {
+        userId: user.uid,
+        prompt: cleanPrompt,
+        model: "wan-2.6",
+        duration: safeDuration,
+        resolution: safeResolution,
+        multi_shots: Boolean(multi_shots),
+        createdAt: Date.now(),
+      };
+
+      // --------------------------------------------------
+      // 4. UI state
+      // --------------------------------------------------
+      setJobActive(true);
+      setLoading(true);
+      setError(null);
+      setProgressText("🚀 Submitting Wan 2.6 job…");
+      setProgressPercent(1);
+
+      // --------------------------------------------------
+      // 5. Create task
+      // --------------------------------------------------
+
+      const token = await getIdToken();
+
+      const res = await fetch("/api/videoapi/generate-text-video-wan26", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`, // ✅ REQUIRED
+      },
+      body: JSON.stringify({
+        prompt: cleanPrompt,
+        duration: safeDuration,
+        resolution: safeResolution,
+        multi_shots: Boolean(multi_shots),
+      }),
+    });
+
 
       
-  
-      const storagePath = imageUrl.startsWith("https://firebasestorage.googleapis.com")
-        ? decodeURIComponent(imageUrl.split("/o/")[1].split("?alt=media")[0])
-        : imageUrl;
-  
-      const storageRef = ref(storage, storagePath);
-  
-      await deleteObject(storageRef).catch((error) => {
-        if (error.code === "storage/object-not-found") {
-          console.warn("⚠️ Image file already deleted. Skipping...");
-        } else {
-          throw error;
-        }
-      });
-  
-      await deleteDoc(imageRef);
-      console.log("✅ Image removed from Firestore & Storage.");
-    } catch (error) {
-      console.error("🚨 Error deleting image:", error);
-      alert("❌ Failed to delete image.");
+      
+
+      const rawText = await res.text();
+      let json;
+
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        console.error("Wan 2.6 non-JSON response:", rawText);
+        throw new Error("Wan 2.6 returned invalid JSON.");
+      }
+
+      const taskId =
+        json?.data?.taskId ||
+        json?.taskId ||
+        json?.job_id;
+
+      if (!res.ok || !taskId) {
+        console.error("Wan 2.6 createTask failed:", json);
+        throw new Error(json?.msg || "Wan 2.6 createTask failed.");
+      }
+
+      // --------------------------------------------------
+      // 6. Persist job for refresh recovery 🔁
+      // --------------------------------------------------
+
+      // --------------------------------------------------
+// 6. Persist job for refresh recovery 🔁 (SOURCE OF TRUTH)
+// --------------------------------------------------
+localStorage.setItem(
+  "active_external_job",
+  JSON.stringify({
+    provider: "wan-2.6",
+    taskId,
+    kind: "t2v", // ✅ ADD THIS
+    meta: {
+      userId: user.uid,
+      prompt: cleanPrompt,
+      duration: safeDuration,
+      resolution: safeResolution,
+    },
+    startedAt: Date.now(),
+  })
+);
+
+      
+      // --------------------------------------------------
+      // 7. Start polling
+      // --------------------------------------------------
+      setCurrentJobId(taskId);
+      currentJobIdRef.current = taskId;
+
+      setProgressText("⏳ Wan 2.6 rendering…");
+      setProgressPercent(10);
+
+      startWan26Polling(taskId, "t2v");
+
+
+    } catch (err) {
+      console.error("❌ Wan 2.6 generation error:", err);
+      setError(err?.message || "Wan 2.6 generation failed.");
+
+      // ❌ DO NOT cleanup persisted job here
+      setJobActive(false);
+      setLoading(false);
     }
-  };
-  
-  
- 
-
-
-  
-
- // 🔹 Listen for Real-Time User Updates (Credits & Membership Status)
- useEffect(() => {
-  if (!user?.uid) return;
-
-  const userRef = doc(db, "users", user.uid);
-  const unsubscribe = onSnapshot(userRef, (snapshot) => {
-    if (snapshot.exists()) {
-      const userData = snapshot.data();
-      console.log("🔥 Firestore Update Detected:", userData);
-
-      // ✅ Update credits & membership in real-time
-      setCredits(userData.credits ?? 50);
-      setMembershipStatus(userData.membershipStatus ?? "free");
-    }
-  });
-
-  return () => unsubscribe();
-}, [user, setCredits, setMembershipStatus]); // ✅ Add setCredits and setMembershipStatus as dependencies
+  },
+  [
+    user,
+    startWan26Polling,
+  ]
+);
 
 
 
+//end
 
-
-  // 🔹 Fetch & Filter Models Based on Membership Status
-  useEffect(() => {
-    const loadModels = async () => {
-      const allModels = await fetchModels();
-      const filteredModels = allModels.filter((model) => {
-        const isNSFW = model.tags?.includes("NSFW");
-        return membershipStatus === "free" ? !isNSFW : true;
-      });
-
-      setModels(filteredModels);
-    };
-
-    if (membershipStatus) {
-      loadModels();
-    }
-  }, [membershipStatus]);
+//image to video wan26
 
 
 
-//generate payload and images
-
-const onGenerateImage = async () => {
+// Wan 2.6 — Image → Video
+const onGenerateWan26ImageVideo = useCallback(async ({
+  prompt,
+  imageUrl,
+  duration = "5",
+  resolution = "720p",
+  multi_shots = false,
+}) => {
   try {
-    // Basic guards
     if (!user?.uid) {
-      alert("Please sign in to generate images.");
-      return;
-    }
-    if (!prompt.trim()) {
-      alert("⚠️ Please enter a prompt.");
-      return;
-    }
-    if (!selectedModel?.title || !selectedSampler) {
-      alert("⚠️ Pick a model and a sampler first.");
-      return;
-    }
-    if ((credits ?? 0) <= 0) {
-      setShowUpgradePopup(true);
-      return;
+      throw new Error("Please log in.");
     }
 
-    // NSFW gate
-    const isNSFW =
-      selectedModel?.tags?.includes("NSFW") ||
-      selectedLora?.name?.toLowerCase?.().includes("nsfw");
-    if (isNSFW && membershipStatus === "free") {
-      alert("⚠️ NSFW content is only for premium members.");
-      return;
+    if (!imageUrl) {
+      throw new Error("Wan 2.6 image-to-video requires an image.");
     }
 
-    setLoading(true);
-
-    // Build payload
-    const metadata = {
-      prompt,
-      negative_prompt: negativePrompt,
-      width,
-      height,
-      steps,
-      sampler_name: selectedSampler,
-      upscaler: selectedUpscaler?.name || null,
-      sd_model_checkpoint: selectedModel.title,
-      cfg_scale: cfgScale,
-      seed,
-      batch_size: batchSize,
-      n_iter: batchCount,
-      restore_faces: true,
-      tiling: false,
-      send_images: true,
-      save_images: false,
-      lora: selectedLora?.name || null,
-      hr_scale: 2.0, 
-      hr_upscaler: selectedUpscaler?.name || "Latent",
-      denoising_strength: 0.4,  
-      // If your API expects a string, pass name; if it expects object, keep as-is.
-      latent_upscaler: selectedLatentUpscaler?.name || selectedLatentUpscaler || null,
+    // ✅ 🔥 MUST BE HERE (BEFORE FETCH)
+    lastWan26MetaRef.current = {
+      userId: user.uid,
+      prompt: prompt?.trim() || "",
+      model: "wan-2.6",
+      duration,
+      resolution,
+      kind: "i2v",
+      createdAt: Date.now(),
     };
 
-     // 🔍 Debug log full payload
-    console.log("📝 Image generation payload:", JSON.stringify(metadata, null, 2));
+    setJobActive(true);
+    setLoading(true);
+    setError(null);
+    setProgressText("🚀 Submitting Wan 2.6 image job…");
+    setProgressPercent(1);
 
-    // Ensure correct model is active server-side (your API design)
-    await setOptions({ sd_model_checkpoint: selectedModel.title });
-    // A small wait can help if your backend loads models asynchronously
-    await new Promise((res) => setTimeout(res, 4000));
+    const token = await getIdToken();
 
-    // Generate
-    const response = await generateImage(metadata);
-    if (!response?.images?.length) {
-      throw new Error("🚨 API returned no images.");
+    const res = await fetch(
+      "/api/videoapi/generate-image-video-wan26",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          prompt,
+          image_urls: [imageUrl],
+          duration,
+          resolution,
+          multi_shots,
+        }),
+      }
+    );
+
+    const raw = await res.text();
+    let json;
+    try {
+      json = JSON.parse(raw);
+    } catch {
+      throw new Error("Wan 2.6 returned invalid JSON.");
     }
 
-    const totalGenerated = response.images.length;
-    const userRef = doc(db, "users", user.uid);
+    const taskId =
+      json?.taskId ||
+      json?.task_id ||
+      json?.data?.taskId ||
+      json?.data?.task_id;
 
-    // Upload each image to Storage and create a Firestore doc
-    for (const base64 of response.images) {
-      const base64Image = `data:image/png;base64,${base64}`;
-      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${user.uid}.png`;
-      const storagePath = `images/${user.uid}/${fileName}`;
-      const imageRef = ref(storage, storagePath);
+    if (!res.ok || !taskId) {
+      throw new Error(json?.error || json?.msg || "Wan 2.6 I2V failed");
+    }
 
-      await uploadString(imageRef, base64Image, "data_url");
-      const downloadURL = await getDownloadURL(imageRef);
+    // ✅ PERSIST FULL META (THIS IS WHY REFRESH WORKS)
+    localStorage.setItem(
+      "active_external_job",
+      JSON.stringify({
+        provider: "wan-2.6",
+        taskId,
+        kind: "i2v",
+        meta: lastWan26MetaRef.current,
+        startedAt: Date.now(),
+      })
+    );
 
+    setCurrentJobId(taskId);
+    currentJobIdRef.current = taskId;
+
+    setProgressText("⏳ Wan 2.6 rendering…");
+    setProgressPercent(10);
+
+    startWan26Polling(taskId, "i2v");
+
+  } catch (err) {
+    console.error("❌ Wan 2.6 I2V error:", err);
+    setError(err.message || "Wan 2.6 image generation failed");
+    setJobActive(false);
+    setLoading(false);
+  }
+}, [user, getIdToken, startWan26Polling]);
+
+//End
+
+// Nano banana google
+
+// Nano Banana (Firestore-first, single source of truth)
+const onGenerateNanoBanana = async ({
+  prompt,
+  aspect_ratio,
+  resolution,
+  output_format,
+}) => {
+  if (!user?.uid) {
+    setError("Please log in to generate images.");
+    return;
+  }
+
+  setLoading(true);
+  setError(null);
+
+  try {
+    const res = await fetch("/api/nano-banana", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        aspect_ratio,
+        resolution,
+        output_format,
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json.error || "Nano Banana failed");
+    }
+
+    const urls = json.resultUrls || [];
+    if (!urls.length) {
+      throw new Error("Nano Banana returned no images");
+    }
+
+    // ✅ WRITE RESULTS TO FIRESTORE (ONCE)
+    for (const url of urls) {
       await addDoc(collection(db, "images"), {
         userId: user.uid,
         username: user.displayName || "Anonymous",
         avatar: user.photoURL || "/default-avatar.png",
-        imageUrl: downloadURL,
-        storagePath, // 👈 store path to make deletion easy
+
+        imageUrl: url,
         prompt: prompt || "N/A",
-        negativePrompt: negativePrompt || "N/A",
-        modelType: selectedModel?.title || "default",
+
+        // 🔖 IMPORTANT: tag the model
+        modelType: "nano-banana-pro",
+
         isPublic: false,
         likes: 0,
         createdAt: serverTimestamp(),
       });
     }
 
-    // Deduct credits safely
-    await runTransaction(db, async (transaction) => {
-      const snap = await transaction.get(userRef);
-      if (!snap.exists()) throw new Error("User document does not exist.");
-
-      const currentCredits = snap.data().credits ?? 0;
-      if (currentCredits < totalGenerated) {
-        throw new Error("Not enough credits to generate images.");
-      }
-
-      transaction.update(userRef, { credits: increment(-totalGenerated) });
-      setCredits(currentCredits - totalGenerated); // sync UI
-    });
+    // ❌ DO NOT call setGeneratedImages here
+    // Firestore onSnapshot will update the gallery automatically
   } catch (err) {
-    console.error("🚨 Error generating image:", err);
-    alert(err?.message || "An unexpected error occurred.");
+    console.error("❌ Nano Banana error:", err);
+    setError(err.message || "Nano Banana generation failed");
   } finally {
     setLoading(false);
   }
@@ -401,935 +1757,202 @@ const onGenerateImage = async () => {
 
 
 
-// 🔹 call on page mount to resume if a job was running
-
-
-// at top of component (you already have pollHandleRef)
-
-useEffect(() => {
-  isActiveRef.current = true;
-  return () => { isActiveRef.current = false; };
-}, []);
-
-// resume a running job after navigation/refresh
 
 
 
 
-// config.js or directly in the component
-// config.js (COMFY_BASE_URL is no longer needed due to Next.js rewrites)
-// PollJOb
 
-// still inside ImageGenerationProvider component, NOT exported
-// still inside ImageGenerationProvider component, NOT exported
-
-// --- Tiny per-job persistence helpers (safe to keep here) ---
-
-
-// --- Utilities used inside the poller ---
-const sleep = (ms) =>
-  new Promise((r) => setTimeout(r, ms + Math.floor(Math.random() * 400)));
-
-const fmtETA = (sec) => {
-  if (!Number.isFinite(sec)) return "estimating…";
-  if (sec < 60) return "< 1 min";
-  const m = Math.round(sec / 60);
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60), rm = m % 60;
-  return `${h}h ${rm}m`;
-};
-const fmtQueue = (pos, len) =>
-  Number.isFinite(pos) && Number.isFinite(len) ? `#${pos} of ${len}` : "…";
+//
 
 
 
-// --- The refresh polling ---
+  // ---------- Restore active job on mount ----------
 
-useEffect(() => {
-  // Only try to restore when we have an authed user
-  if (!user) return;
+  
 
-  const raw = localStorage.getItem("t2v_active_job");
-  if (!raw) return;
+  // ---------- Cancel job ----------
 
-  (async () => {
+  // ---------- Cancel job ----------
+
+  const cancelPoll = useCallback(
+  async (jobId) => {
     try {
-      const saved = JSON.parse(raw);
-      const jobId = saved?.id;
-      if (!jobId) return;
-
-      // visually resume
-      setCurrentJobId(jobId);
-      setJobActive(true);
-      setProgressText("⏳ Resuming job…");
-      setProgressPercent((p) => (p ?? 8));
-
       const token = await getIdToken();
-
-      // re-enter your existing poller — same callbacks as in onGenerateVideo
-      pollJobUntilDone({
-        jobId,
-        token,
-        onUpdate: (id, snap) => {
-          if (id !== jobId) return;
-          const status = snap?.status || "unknown";
-          if (status === "queued") {
-            const pos = Number.isFinite(+snap?.queue_position) ? +snap.queue_position : null;
-            const len = Number.isFinite(+snap?.queue_length) ? +snap.queue_length : null;
-            setProgressText(`📦 In queue ${pos && len ? `#${pos} of ${len}` : "…"}`);
-            setProgressPercent((p) => Math.max(p ?? 5, 8));
-          } else if (status === "processing") {
-            const pct = Number.isFinite(+snap?.progress) ? Math.min(98, Math.max(10, +snap.progress)) : 35;
-            setProgressText((snap?.stage || "🎬 Rendering…"));
-            setProgressPercent(pct);
-          } else if (status === "poll_error") {
-            setProgressText("⏳ Checking status…");
-          }
-        },
-        onFinish: (id, final) => {
-          if (id !== jobId) return;
-          const url = final?.video_url;
-          if (url) {
-            setVideoUrl(url);
-            setGeneratedVideos((v) => [
-              { url, jobId: id, prompt: saved?.prompt, fps: saved?.fps, duration: saved?.duration, ts: Date.now() },
-              ...v,
-            ]);
-            setProgressText("✅ Video is ready!");
-            setProgressPercent(100);
-          } else {
-            setProgressText("⚠️ Finished, but no video URL returned.");
-            setProgressPercent(null);
-          }
-          setJobActive(false);
-          localStorage.removeItem("t2v_active_job");
-        },
-        onError: (id, err) => {
-          if (id !== jobId) return;
-          setProgressText(`❌ ${err?.message || "Job failed."}`);
-          setProgressPercent(null);
-          setJobActive(false);
-          localStorage.removeItem("t2v_active_job");
-        },
-      });
-    } catch (e) {
-      console.error("Restore failed:", e);
-      localStorage.removeItem("t2v_active_job");
-    }
-  })();
-}, [user]); // depends on user so restore runs after auth is ready
-
-
-
-
-/**
- * Poll a video job until it finishes, fails, or times out.
- * - No global setters. All updates go through callbacks you provide.
- * - Returns a { cancel } handle you can call to abort polling.
- *
- * onUpdate(jobId, snapshot)   // called on every poll tick
- * onFinish(jobId, finalSnap)  // called when job finishes with video_url
- * onError(jobId, error)       // called on failure/cancel/timeout
- */
- // place this INSIDE your context file (no export)
-// Poll a single job until it finishes (or errors/cancels).
-// Compatible with both old/new backend shapes.
-function pollJobUntilDone({
-  jobId,
-  token,
-  baseUrl = "",
-  serverEtaSec,          // optional seconds hint from start API
-  serverTimeout,         // optional seconds hint from start API
-  timeoutMs,             // optional client cap (ms)
-  onUpdate,              // (jobId, snapshot) => void
-  onFinish,              // (jobId, finalSnapshot) => void
-  onError,               // (jobId, error) => void
-  onCancel,              // (jobId) => void (optional)
-  propagateCancelToServer = true, // TRY to call /videoapi/cancel-job on cancel/timeout
-}) {
-  if (!jobId) throw new Error("pollJobUntilDone: jobId is required");
-  if (!token) throw new Error("pollJobUntilDone: auth token is required");
-
-  // normalize baseUrl once to avoid double slashes
-  const root = (baseUrl || "").replace(/\/+$/, "");
-  const started = Date.now();
-  const controller = new AbortController();
-  let cancelled = false;
-
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const backoff = (n) => Math.min(4000, 600 + n * 300) + Math.floor(Math.random() * 250);
-
-  const serverMs =
-    Number.isFinite(+serverEtaSec) ? +serverEtaSec * 1000 :
-    Number.isFinite(+serverTimeout) ? +serverTimeout * 1000 : null;
-
-  // prefer server hint; otherwise 30m client cap
-  const cap = serverMs ? Math.max(timeoutMs || 0, serverMs) : (timeoutMs || 30 * 60 * 1000);
-
-  const readJSON = async (res) => {
-    let txt = "";
-    try { txt = await res.text(); } catch {}
-    try { return txt ? JSON.parse(txt) : {}; } catch { return {}; }
-  };
-
-  // Best-effort backend cancel
-  const cancelOnServer = async () => {
-    if (!propagateCancelToServer) return;
-    try {
-      await fetch(`${root}/videoapi/cancel-job`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        },
-        body: JSON.stringify({ client_id: jobId }),
-      });
-    } catch {
-      /* ignore */
-    }
-  };
-
-  (async () => {
-    try {
-      let attempt = 0;
-
-      while (!cancelled) {
-        // client-side timeout
-        if (Date.now() - started > cap) {
-          // try to stop compute on the server before erroring out
-          await cancelOnServer();
-          throw new Error("Timed out waiting for video.");
-        }
-
-        if (controller.signal.aborted) {
-          if (!cancelled) {
-            cancelled = true;
-            onCancel?.(jobId);
-          }
-          return;
-        }
-
-        // fetch status for THIS job only
-        let res, data;
-        try {
-          res = await fetch(`${root}/videoapi/job-status?id=${encodeURIComponent(jobId)}`, {
-            method: "GET",
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "Cache-Control": "no-store",
-            },
-            signal: controller.signal,
-          });
-          data = await readJSON(res);
-        } catch (err) {
-          if (cancelled || controller.signal.aborted) return;
-          onUpdate?.(jobId, { status: "poll_error", detail: err?.message || "network_error" });
-          await sleep(backoff(attempt++));
-          continue;
-        }
-
-        // non-2xx handling
-        if (!res.ok) {
-          if (res.status === 404) {
-            // transient: job not registered yet; retry while under cap
-            onUpdate?.(jobId, { status: "unknown", http: 404 });
-            await sleep(backoff(attempt++));
-            continue;
-          }
-          if (res.status === 429) {
-            // rate limited -> backoff more
-            onUpdate?.(jobId, { status: "poll_error", http: 429 });
-            await sleep(backoff(attempt++));
-            continue;
-          }
-          if (res.status === 410) {
-            // gone/expired
-            throw new Error(data?.detail || "Job expired.");
-          }
-          throw new Error(data?.detail || `Status check failed (HTTP ${res.status}).`);
-        }
-
-        // emit snapshot to caller (store under state[jobId])
-        onUpdate?.(jobId, data);
-
-        const s = (data && data.status) || "unknown";
-
-        // finish path
-        if ((s === "complete" || s === "finished") && data?.video_url) {
-          onFinish?.(jobId, data);
-          return;
-        }
-
-        // error/cancel paths
-        if (s === "error" || s === "failed" || s === "cancelled" || s === "canceled") {
-          const msg = data?.error || data?.detail || `Job ${s}.`;
-          throw new Error(msg);
-        }
-
-        // adaptive cadence
-        let delay = 3000;
-        if (s === "queued") {
-          const pos = Number.isFinite(+data?.queue_position) ? +data.queue_position : null;
-          delay = (pos != null && pos <= 2) ? 2000 : 5000;
-        } else if (s === "processing" || (data?.stage || "").toLowerCase().includes("render")) {
-          delay = 1800;
-        }
-
-        await sleep(delay);
-      }
+      await cancelComfyJob(jobId, token);
     } catch (err) {
-      if (!cancelled && !controller.signal.aborted) {
-        onError?.(jobId, err);
-      }
+      console.warn("Cancel API failed, forcing cleanup:", err);
     }
-  })();
 
-  // per-job cancel handle
-  return {
-    cancel: async () => {
-      if (cancelled) return;
-      cancelled = true;
-      controller.abort();     // abort current fetch
-      await cancelOnServer(); // try to stop the backend job
-      onCancel?.(jobId);
-    },
-  };
-}
-
-
-
-
-//ON generate video( image to video )
-// ON generate video (image to video)
-const onGenerateVideo = async ({
-  imageFile,
-  prompt,
-  negative_prompt = "",
-  lora_name = "",
-  fps = 20,
-  duration = 6,
-  setProgressText,
-  setProgressPercent,
-
-  // ⬇️ pass this if it's not already available via closure/context
-  selectedLoras = [], // [{ label: "HIGH"|"LOW", safetensor, strength?, trigger? }, ...]
-}) => {
-  // guards
-  if (!user) { setError("⚠️ You must be logged in to generate a video."); return; }
-  if (!imageFile) { setError("⚠️ A reference image is required."); return; }
-  if (!prompt || !prompt.trim()) { setError("⚠️ Prompt is required."); return; }
-  if ((credits ?? 0) <= 0) { setError("❌ You have 0 credits left."); setShowUpgradePopup(true); return; }
-
-  // clamp like backend (I2V uses int seconds)
-  const fpsInt = Math.max(1, Math.min(60, Math.round(Number(fps) || 24)));
-  const durSec = Math.max(1, Math.min(30, Math.floor(Number(duration) || 4)));
-
-  try {
-    setJobActive(true);
-    setLoading(true);
-    setError(null);
-    setVideoUrl(null);
-    setGeneratedVideos([]);
-    setProgressText("🚀 Submitting your video job…");
-    setProgressPercent(1);
-
-    const token = await getIdToken();
-
-    // ===== Build HIGH/LOW arrays from the LoRA cards =====
-   const highs = (selectedLoras||[]).filter(x => x && String(x.label).toUpperCase()==="HIGH");
-    const lows  = (selectedLoras||[]).filter(x => x && String(x.label).toUpperCase()==="LOW");
-
-
-    // (optional) dedupe by safetensor while preserving order
-    // Safer dedupe: case-fold + fallback to model
-const keyOf = (x) => String(x?.safetensor || x?.model || "").trim().toLowerCase();
-
-const dedupe = (arr) => {
-  const seen = new Set();
-  return arr.filter((x) => {
-    const k = keyOf(x);
-    if (!k) return false;           // skip empty keys
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-};
-
-// Use it
-const highUnique = dedupe(highs);
-const lowUnique  = dedupe(lows);
-
-
-    const user_high_loras     = highUnique.map(x => x.safetensor);
-    const user_high_strengths = highUnique.map(x => (x?.strength != null ? Number(x.strength) : 1.0));
-    const user_low_loras      = lowUnique.map(x => x.safetensor);
-    const user_low_strengths  = lowUnique.map(x => (x?.strength  != null ? Number(x.strength)  : 1.0));
-
-    // (optional) merge LoRA trigger phrases into the prompt you send
-    const triggerTexts = [...highUnique, ...lowUnique]
-      .map(x => (x?.trigger || "").trim())
-      .filter(Boolean);
-    const sendPrompt = [prompt, ...triggerTexts].filter(Boolean).join(", ");
-
-    // ===== Start job (supports both old and new return shapes) =====
-    const start = await generateVideo({
-      imageFile,
-      prompt: sendPrompt,    // or just `prompt` if you don't want triggers appended
-      negative_prompt,
-      token,
-
-      // ✅ NEW explicit split → HIGH (node 470) / LOW (node 471)
-      user_high_loras,
-      user_high_strengths,
-      user_low_loras,
-      user_low_strengths,
-
-      // ⬇️ legacy (optional; keep if other codepaths still depend on it)
-      lora_name,
-
-      // core knobs
-      fps: fpsInt,
-      duration: durSec,
-    });
-
-    const job_id = String(start?.job_id || "");
-    if (!job_id) throw new Error("🚫 No job_id returned from backend.");
-
-    // Normalize ETA/timeout from either shape
-    const timeoutSec =
-      Number.isFinite(start?.timeout) ? Number(start.timeout) :
-      Number.isFinite(start?.timeoutMs) ? Math.round(Number(start.timeoutMs) / 1000) :
-      undefined;
-
-    const etaSec =
-      Number.isFinite(start?.eta_seconds) ? Number(start.eta_seconds) :
-      Number.isFinite(start?.serverEtaSec) ? Number(start.serverEtaSec) :
-      undefined;
-
-    // Prefer exact charged_credits (new backend), fallback to +1 UI decrement
-    const charged =
-      Number.isFinite(start?.charged_credits) ? Number(start.charged_credits) :
-      Number.isFinite(start?.raw?.charged_credits) ? Number(start.raw.charged_credits) :
-      1;
-
-    const frames =
-      Number.isFinite(start?.frames) ? Number(start.frames) :
-      Number.isFinite(start?.raw?.frames) ? Number(start.raw.frames) :
-      fpsInt * durSec;
-
-    // mark current job (state + ref)
-    setCurrentJobId(job_id);
-    currentJobIdRef.current = job_id;
-
-    // Persist active job so refresh/navigation can resume polling
-    localStorage.setItem(
-      "t2v_active_job",
-      JSON.stringify({
-        id: job_id,
-        kind: "i2v",
-        prompt: sendPrompt, // store what you actually sent
-        fps: fpsInt,
-        duration: durSec,
-        frames,
-        charged_credits: charged,
-        startedAt: Date.now(),
-      })
-    );
-
-    // deduct credits client-side to reflect backend charge immediately
-    setCredits((prev) => Math.max((prev ?? 0) - charged, 0));
-
-    // start polling (do NOT await)
-    const handle = pollJobUntilDone({
-      jobId: job_id,
-      token,
-      serverEtaSec: etaSec,
-      serverTimeout: timeoutSec,
-      onUpdate: (id, snap) => {
-        if (!isMine(id)) return; // ⛔ cross-talk guard
-
-        const status = snap?.status || "unknown";
-        if (status === "queued") {
-          const pos = Number.isFinite(+snap?.queue_position) ? +snap.queue_position : null;
-          const len = Number.isFinite(+snap?.queue_length) ? +snap.queue_length : null;
-          setProgressText(`📦 In queue ${pos && len ? `#${pos} of ${len}` : "…"}`);
-          setProgressPercent((p) => Math.max(p ?? 5, 8));
-        } else if (status === "processing") {
-          const pct = Number.isFinite(+snap?.progress) ? Math.min(98, Math.max(10, +snap.progress)) : 35;
-          const stage = snap?.stage || "rendering";
-          setProgressText(stage.includes("render") ? "🎬 Rendering…" : "🧩 Preparing…");
-          setProgressPercent(pct);
-        } else if (status === "poll_error") {
-          setProgressText("⏳ Checking status…");
-        }
-      },
-      onFinish: (id, final) => {
-        if (!isMine(id)) return; // ⛔ cross-talk guard
-
-        const url = final?.video_url;
-        if (url) {
-          setVideoUrl(url);
-          setGeneratedVideos((v) => [
-            { url, jobId: id, prompt: sendPrompt, fps: fpsInt, duration: durSec, ts: Date.now() },
-            ...v,
-          ]);
-          setProgressText("✅ Video is ready!");
-          setProgressPercent(100);
-        } else {
-          setProgressText("⚠️ Finished, but no video URL returned.");
-          setProgressPercent(null);
-        }
-        setLoading(false);
-        setJobActive(false);
-      },
-      onError: (id, err) => {
-        if (!isMine(id)) return; // ⛔ cross-talk guard
-        setProgressText(`❌ ${err?.message || "Job failed."}`);
-        setProgressPercent(null);
-        setLoading(false);
-        setJobActive(false);
-      },
-    });
-
-    pollHandleRef.current = handle;
-    setTimeout(() => latestVideoRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
-  } catch (err) {
-    console.error("🚨 Video generation failed:", err);
-    setError(err?.message || "Unexpected error occurred.");
-    setProgressText(null);
-    setProgressPercent(null);
-    setLoading(false);
-    setCurrentJobId(null);
-    currentJobIdRef.current = null;
-    setJobActive(false);
-    if (err?.message?.toLowerCase?.().includes("credits")) setShowUpgradePopup(true);
-  }
-};
-
-
-
-
-
-// Assumes you have these somewhere in your component:
-// const currentJobIdRef = useRef(null);
-// const isActiveRef = useRef(true);            // if you already have it, reuse yours
-// const [currentJobId, setCurrentJobId] = useState(null);
-// const [loading, setLoading] = useState(false);
-// const [jobActive, setJobActive] = useState(false);
-// const pollHandleRef = useRef(null);
-
-// --- Text → Video ---
-const onGenerateTextToVideo = async ({
-  prompt,
-  negative_prompt = "",
-  lora_name = "",
-  loras = [],
-  fps = 20,
-  duration = 10,
-  setProgressText,
-  setProgressPercent,
-}) => {
-  // basic guards
-  if (!user) { setError("⚠️ You must be logged in to generate a video."); return; }
-  if (!prompt || !prompt.trim()) { setError("⚠️ Prompt is required."); return; }
-  if ((credits ?? 0) <= 0) { setError("❌ You have 0 credits left."); setShowUpgradePopup(true); return; }
-
-  // clamp like backend
-  const fpsInt = Math.max(1, Math.min(60, Math.round(Number(fps) || 24)));
-  const durSec = Math.max(0.5, Math.min(30.0, Number(duration) || 4));
-
-  try {
-    setJobActive(true);
-    setLoading(true);
-    setError(null);
-    setVideoUrl(null);
-    setProgressText("🚀 Submitting your text-to-video job…");
-    setProgressPercent(1);
-
-    const token = await getIdToken();
-    const chosenLoras = Array.isArray(loras) && loras.length
-      ? loras.slice(0, 3)
-      : (lora_name ? [lora_name] : []);
-
-    // hit backend
-    const resp = await generateTextVideo({
-      prompt,
-      negative_prompt,
-      loras: chosenLoras,
-      fps: fpsInt,
-      duration: durSec,
-      token,
-    });
-
-    const {
-      job_id,
-      timeout: serverTimeout,     // seconds
-      eta_seconds: serverEtaSec,  // seconds
-      queue_position,
-      queue_length,
-    } = resp || {};
-
-    if (!job_id) throw new Error(`🚫 No job_id returned.`);
-
-    // mark current job (state + ref)
-    setCurrentJobId(job_id);
-    currentJobIdRef.current = job_id;
-
-
-    localStorage.setItem(
-  "t2v_active_job",
-  JSON.stringify({
-    id: job_id,
-    kind: "t2v",
-    prompt,
-    fps: fpsInt,
-    duration: durSec,
-    startedAt: Date.now(),
-  })
+    // ✅ ALWAYS cleanup
+    cleanupJobState();
+  },
+  [getIdToken, cleanupJobState]
 );
 
 
-    // deduct 1 credit now (or move to onFinish if you prefer)
-    setCredits(prev => Math.max((prev ?? 0) - 1, 0));
 
-    // initial queue UX
-    if (Number.isFinite(queue_position) && Number.isFinite(queue_length)) {
-      setProgressText(`📦 In queue #${queue_position} of ${queue_length} — estimating…`);
-      setProgressPercent(p => Math.max(p ?? 5, 8));
-    }
+ 
 
-    // start polling (do NOT await)
-    const handle = pollJobUntilDone({
-      jobId: job_id,
-      token,
-      serverEtaSec,
-      serverTimeout,
-      onUpdate: (id, snap) => {
-        if (!isMine(id)) return;            // ⛔ cross-talk guard
-
-        const status = snap?.status || "unknown";
-        if (status === "queued") {
-          const pos = Number.isFinite(+snap?.queue_position) ? +snap.queue_position : null;
-          const len = Number.isFinite(+snap?.queue_length) ? +snap.queue_length : null;
-          setProgressText(`📦 In queue ${pos && len ? `#${pos} of ${len}` : "…"}`);
-          setProgressPercent(p => Math.max(p ?? 5, 8));
-        } else if (status === "processing") {
-          const pct = Number.isFinite(+snap?.progress) ? Math.min(98, Math.max(10, +snap.progress)) : 35;
-          const stage = snap?.stage || "rendering";
-          setProgressText(stage.includes("render") ? "🎬 Rendering…" : "🧩 Preparing…");
-          setProgressPercent(pct);
-        } else if (status === "poll_error") {
-          setProgressText("⏳ Checking status…");
-        }
-      },
-      onFinish: (id, final) => {
-        if (!isMine(id)) return;            // ⛔ cross-talk guard
-
-        const url = final?.video_url;
-        if (url) {
-          setVideoUrl(url);
-          setGeneratedVideos(v => [
-            { url, jobId: id, prompt, fps: fpsInt, duration: durSec, ts: Date.now() },
-            ...v,
-          ]);
-          setProgressText("✅ Video is ready!");
-          setProgressPercent(100);
-        } else {
-          setProgressText("⚠️ Finished, but no video URL returned.");
-          setProgressPercent(null);
-        }
-        setLoading(false);
-        setJobActive(false);
-      },
-      onError: (id, err) => {
-        if (!isMine(id)) return;            // ⛔ cross-talk guard
-        setProgressText(`❌ ${err?.message || "Job failed."}`);
-        setProgressPercent(null);
-        setLoading(false);
-        setJobActive(false);
-      },
-    });
-
-    // keep cancel handle if you support Cancel
-    pollHandleRef.current = handle;
-
-    setTimeout(() => latestVideoRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
-  } catch (err) {
-    console.error("🚨 Text-to-video failed:", err);
-    setError(err?.message || "Unexpected error occurred.");
-    setProgressText(null);
-    setProgressPercent(null);
-    setLoading(false);
-    setCurrentJobId(null);
-    currentJobIdRef.current = null;
-    setJobActive(false);
-    if (err?.message?.toLowerCase?.().includes("credits")) setShowUpgradePopup(true);
-  }
-};
-
-
-
-
-const cancelPoll = async (jobId) => {
-  try {
-    pollHandleRef.current?.cancel?.();
-    pollHandleRef.current = null;
-
-    if (jobId) {
-      const token = await getIdToken();
-      try { await cancelComfyJob(jobId, token); } catch {}
-      localStorage.removeItem("t2v_active_job");
-    }
-
-    setProgressText("❌ Job cancelled.");
-    setProgressPercent(null);
-    setLoading(false);
-    setVideoUrl(null);
-    setCurrentJobId(null);
-    try { currentJobIdRef.current = null; } catch {}
-  } catch (err) {
-    console.warn("⚠️ Cancel failed:", err?.message || err);
-    setProgressText("⚠️ Cancel failed.");
-    setProgressPercent(null);
-    setLoading(false);
-  }
-};
-
-
-  // 🔹 Function to Send Prompt to Input
+  // ---------- LoRA & Metadata helpers ----------
   const onSendToPrompt = ({ text, negative }) => {
-    
-    setPrompt(text);
-    setNegativePrompt(negative);
+    setPrompt(text || '');
+    setNegativePrompt(negative || '');
   };
 
-
-  // 🔹 Function to Handle LoRA Selection
   const selectLora = (name, activationText, thumbnail) => {
-    const isNSFW = name.toLowerCase().includes("nsfw");
-  
-    if (isNSFW && membershipStatus === "free") {
-      alert("⚠️ NSFW LoRA models are only available for premium members.");
+    const isNSFW = name.toLowerCase().includes('nsfw');
+    if (isNSFW && membershipStatus === 'free') {
+      alert('⚠️ NSFW LoRA models are only available for premium members.');
       return false;
     }
-  
     setSelectedLora({ name, activationText, thumbnail });
     return true;
   };
-  
 
   const injectLoraToPrompt = (name, activationText, weight = 1.0) => {
     const tag = `<lora:${name}:${weight}>`;
-  
     setPrompt((prev) => {
-      const withoutOldLora = prev.replace(/<lora:[^>]+>/g, "").trim();
-      return `${withoutOldLora}, ${activationText}, ${tag}`.replace(/^,/, "").trim();
+      const withoutOldLora = prev.replace(/<lora:[^>]+>/g, '').trim();
+      return `${withoutOldLora}${withoutOldLora ? ', ' : ''}${activationText}, ${tag}`.trim();
     });
   };
-  
 
   const handleLoraSelect = (name, activationText, thumbnail) => {
     if (selectLora(name, activationText, thumbnail)) {
       injectLoraToPrompt(name, activationText);
     }
   };
-  
-  
-  // 🔹 Function to Open Metadata Modal (When Clicking an Image)
+
   const handleImageClick = (image) => {
     setSelectedImage(image.img);
     setSelectedMetadata(image.metadata);
   };
 
-  // 🔹 Function to Reuse Metadata for Regenerating an Image
-
   const handleReuseMetadata = (metadata) => {
     if (!metadata) return;
-  
-    // Reuse prompts
-    setPrompt(metadata.prompt || "");
-    setNegativePrompt(metadata.negativePrompt || "");
-  
-    // Optional: Reuse model settings if available
+    setPrompt(metadata.prompt || '');
+    setNegativePrompt(metadata.negativePrompt || '');
     if (metadata.modelType && models) {
-      const matchedModel = models.find((m) => m.title === metadata.modelType);
-      if (matchedModel) {
-        setSelectedModel(matchedModel);
-      }
+      const matched = models.find((m) => m.title === metadata.modelType);
+      if (matched) setSelectedModel(matched);
     }
-  
-    // Reuse sampler
-    if (metadata.sampler) {
-      setSelectedSampler(metadata.sampler);
-    }
-  
-    // Reuse resolution
-    setImageResolution(metadata.imageResolution || "512x512");
-  
-    // Reuse generation parameters
+    if (metadata.sampler) setSelectedSampler(metadata.sampler);
+    setImageResolution(metadata.imageResolution || { width: 512, height: 512 });
     setCfgScale(metadata.cfgScale || 7);
     setSteps(metadata.steps || 20);
-  
-    // Clear the selected image from preview
     setSelectedImage(null);
   };
-  
-  
-  
 
   const handleTemplateSelect = (template) => {
-    const {
-      lora,
-      weight = 1.0,
-      activationText = "",
-      promptExtras = "",
-      negativePrompt = "",
-      model,
-      cfg,
-      steps,
-      sampler
-    } = template;
-  
-    const loraName = lora.replace(/\s+/g, "_");
+    const { lora, weight = 1.0, activationText = '', promptExtras = '', negativePrompt = '', model, cfg, steps, sampler } = template;
+    const loraName = lora.replace(/\s+/g, '_');
     const loraTag = `<lora:${loraName}:${weight}>`;
-  
-    // 🧼 Clean old <lora:...> tags just in case
-    const cleanedPromptExtras = promptExtras.replace(/<lora:[^>]+>/g, "").trim();
-    const cleanedActivation = activationText.replace(/<lora:[^>]+>/g, "").trim();
-  
-    const fullPrompt = [cleanedActivation, cleanedPromptExtras, loraTag]
-      .filter(Boolean)
-      .join(", ");
-  
+    const cleanedExtras = promptExtras.replace(/<lora:[^>]+>/g, '').trim();
+    const cleanedActivation = activationText.replace(/<lora:[^>]+>/g, '').trim();
+    const fullPrompt = [cleanedActivation, cleanedExtras, loraTag].filter(Boolean).join(', ');
     setPrompt(fullPrompt.trim());
-    setNegativePrompt(negativePrompt || "");
-  
-    const matchedModel = models.find((m) => m.title === model);
-    if (matchedModel) setSelectedModel(matchedModel);
-  
+    setNegativePrompt(negativePrompt || '');
+    const matched = models.find((m) => m.title === model);
+    if (matched) setSelectedModel(matched);
     setCfgScale(cfg || 7);
     setSteps(steps || 20);
     if (sampler) setSelectedSampler(sampler);
-  
-    setSelectedLora({
-      name: loraName,
-      activationText,
-      thumbnail: `/loras/${loraName}.preview.png`,
-    });
+    setSelectedLora({ name: loraName, activationText, thumbnail: `/loras/${loraName}.preview.png` });
   };
-  
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   return (
     <ImageGenerationContext.Provider
-      value={{
-        prompt,
-        setPrompt,
-        negativePrompt,
-        setNegativePrompt,
-        generatedImages,
-        setGeneratedImages,
-        selectedModel,
-        setSelectedModel,
-        selectedSampler,
-        setSelectedSampler,
-        selectedUpscaler,
-        setSelectedUpscaler,
-        selectedImage,
-        setSelectedImage,
-        imageResolution,
-        setImageResolution,
-        loading,
-        onGenerateImage, // ✅ Now properly passed in context
-        onSendToPrompt,
-        handleLoraSelect,
-        handleImageClick,
-        handleReuseMetadata,
-        selectedLora,
-        setSelectedLora,
-        selectedMetadata,
-        setSelectedMetadata,
-        credits,
-        setCredits,
-        showUpgradePopup,
-        setShowUpgradePopup,
-        upscalers,  // ✅ New global state
-        setUpscalers,   
-        membershipStatus,
-        models,
-        deleteImage, // ✅ Now available globally
-        setMembershipStatus,
-        selectedSampler,
-        steps,setSteps,
-        cfgScale,setCfgScale,
-        seed,setSeed,
-        batchSize,setBatchSize,
-        batchCount, setBatchCount,
-        selectedAspectRatio,
-        setSelectedAspectRatio,
-        handleAspectRatioChange,
-        width,height,
-        generatedVideos,
-        handleTemplateSelect,
-        latentUpscalers,
-        selectedLatentUpscaler,
-        setSelectedLatentUpscaler,
-        allUpscalers,
-        error,
-        setError,
-        videoUrl,
-        setVideoUrl,
-        mode,
-        setMode,
-        generatedVideos,
-        setGeneratedVideos,
-        onGenerateTextToVideo,
-        onGenerateVideo,
-        setLoading,
-         progressText,
-        setProgressText,
-        progressPercent,
-        setProgressPercent,
-         cancelPoll,
-         currentJobId,
-         setCurrentJobId,
-         latestVideoRef,
-         jobActive,
-         setJobActive,
-      
-         
-       
+  value={{
+    // prompts
+    prompt, setPrompt,
+    negativePrompt, setNegativePrompt,
 
-     
-        
+    // images
+    generatedImages, setGeneratedImages,
+    deleteImage,
 
+    // models & samplers
+    models,
+    selectedModel, setSelectedModel,
+    selectedSampler, setSelectedSampler,
 
-      }}
-    >
+    // upscalers
+    upscalers, setUpscalers,
+    latentUpscalers,
+    allUpscalers,
+    selectedUpscaler, setSelectedUpscaler,
+    selectedLatentUpscaler, setSelectedLatentUpscaler,
 
+    // samplers
+    samplers,
+    samplersLoading,
+    samplersError,
+    reloadSamplers,
+
+    // params
+    steps, setSteps,
+    cfgScale, setCfgScale,
+    seed, setSeed,
+    batchSize, setBatchSize,
+    batchCount, setBatchCount,
+
+    // resolution
+    selectedAspectRatio, setSelectedAspectRatio,
+    imageResolution, setImageResolution,
+    handleAspectRatioChange,
+    width, height,
+
+    // lora & metadata
+    selectedLora, setSelectedLora,
+    selectedImage, setSelectedImage,
+    selectedMetadata, setSelectedMetadata,
+    handleLoraSelect,
+    handleImageClick,
+    handleReuseMetadata,
+    handleTemplateSelect,
+    onSendToPrompt,
+
+    // user / plan
+    credits, setCredits,
+    membershipStatus, setMembershipStatus,
+
+    // UI / loading
+    loading, setLoading,
+    showUpgradePopup, setShowUpgradePopup,
+    error, setError,
+
+    // video state
+    mode, setMode,
+    videoUrl, setVideoUrl,               // optional / legacy
+    generatedVideos, setGeneratedVideos, // primary source
+    currentJobId, setCurrentJobId,
+    jobActive, setJobActive,
+    progressText, setProgressText,
+    progressPercent, setProgressPercent,
+    etaTargetMs, setEtaTargetMs,
+    latestVideoRef,
+    cleanupJobState,
+
+    // actions
+    onGenerateImage,
+    onGenerateVideo,          // Wan I2V
+    onGenerateTextToVideo,    // Wan T2V
+    onGenerateSeedanceVideo,
+    onGenerateSeedanceImageVideo,   // Seedance T2V
+    onGenerateWan26Video,
+    onGenerateWan26ImageVideo,
+    onGenerateNanoBanana,
+
+    cancelPoll,
+
+    videoModel,
+    setVideoModel,
+  }}
+>
       {children}
-
-      
       {showUpgradePopup && <UpgradePopup onClose={() => setShowUpgradePopup(false)} />}
     </ImageGenerationContext.Provider>
   );
 };
 
-// 🔹 Hook to Access Context
 export const useImageGeneration = () => useContext(ImageGenerationContext);
-
-

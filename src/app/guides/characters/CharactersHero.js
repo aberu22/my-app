@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
  */
 export default function CharactersHero({
   title = "Text to Video demo",
-  tag = "Characters",
+  tag = "T2V cinematic",
   coverSrc = "/images/guide3.jpg",
   videoSrc = "/videos/t2v.mp4",
   posterSrc = "/images/guide3.jpg",
@@ -102,7 +102,7 @@ export default function CharactersHero({
 
       {/* Placeholder for the rest of the guide */}
       <div id="steps" className="mx-auto max-w-5xl px-6 pb-12">
-        <h3 className="mb-3 text-lg font-semibold">What you'll learn</h3>
+        <h3 className="mb-3 text-lg font-semibold">Cinematic Prompts</h3>
         <ul className="list-disc space-y-1 pl-6 text-sm text-white/85">
           <li>⚡ Example Workflow in Wan 2.1
             Upload style_ref.jpg (an oil painting brushwork sample).
