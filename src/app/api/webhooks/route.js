@@ -8,24 +8,22 @@ export const dynamic = "force-dynamic";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// ------------------------------------
-// Subscription plans (priceId → plan)
-// ------------------------------------
+/* =========================================================
+   Subscription plans (priceId → plan)
+========================================================= */
+
 const PLAN_DETAILS = {
   [process.env.STRIPE_SUB_CREATOR]: {
     credits: 800,
     status: "creator",
-    price: 12,
   },
   [process.env.STRIPE_SUB_VISIONARY]: {
     credits: 3000,
     status: "visionary",
-    price: 29,
   },
   [process.env.STRIPE_SUB_PRO]: {
     credits: 8000,
     status: "pro",
-    price: 59,
   },
 };
 
@@ -34,9 +32,10 @@ function planFromPrice(price) {
   return PLAN_DETAILS[price.id] || null;
 }
 
-// ------------------------------------
-// Idempotency helpers
-// ------------------------------------
+/* =========================================================
+   Idempotency helpers
+========================================================= */
+
 async function hasProcessed(eventId) {
   const ref = db.collection("stripe_events").doc(eventId);
   const snap = await ref.get();
@@ -51,9 +50,10 @@ async function markProcessed(eventId) {
   );
 }
 
-// ------------------------------------
-// Expand thin events safely
-// ------------------------------------
+/* =========================================================
+   Expand thin Stripe events safely
+========================================================= */
+
 async function materialize(event) {
   const obj = event.data.object;
 
@@ -72,9 +72,10 @@ async function materialize(event) {
   return obj;
 }
 
-// ------------------------------------
-// WEBHOOK HANDLER
-// ------------------------------------
+/* =========================================================
+   WEBHOOK HANDLER
+========================================================= */
+
 export async function POST(req) {
   const sig = req.headers.get("stripe-signature");
   if (!sig) {
@@ -94,57 +95,108 @@ export async function POST(req) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  // Prevent duplicate processing
   if (await hasProcessed(event.id)) {
     return NextResponse.json({ received: true });
   }
 
   try {
-    // ------------------------------------
-    // CHECKOUT COMPLETED (NO CREDITS HERE)
-    // ------------------------------------
+    /* =====================================================
+       CHECKOUT COMPLETED
+       - Credit packs: grant credits
+       - Subscriptions: store IDs only
+    ===================================================== */
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
 
-      // Credit packs
-      if (
-        session.metadata?.type === "credit_pack" &&
-        session.payment_status === "paid"
-      ) {
-        const userId = session.metadata.userId;
-        const credits = parseInt(session.metadata.credits, 10);
+      console.log("🧾 checkout.session.completed", {
+        id: session.id,
+        payment_status: session.payment_status,
+        metadata: session.metadata,
+        client_reference_id: session.client_reference_id,
+      });
 
-        await db.collection("users").doc(userId).update({
-          credits: admin.firestore.FieldValue.increment(credits),
-        });
+      /* ---------- CREDIT PACKS ---------- */
+      if (session.payment_status === "paid") {
+        const isCreditPack = session.metadata?.type === "credit_pack";
 
-        await markProcessed(event.id);
-        return NextResponse.json({ received: true });
-      }
+        if (isCreditPack) {
+          // userId fallback: client_reference_id is set in buy-credits
+          let userId =
+            session.metadata?.userId || session.client_reference_id;
 
-      // Subscriptions → ONLY store IDs
-      if (session.mode === "subscription") {
-        const userId = session.metadata?.userId;
-        if (!userId) {
-          return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+          let credits = Number(session.metadata?.credits || 0);
+
+          // Fallback: retrieve expanded session if metadata incomplete
+          if (!userId || !credits) {
+            const full = await stripe.checkout.sessions.retrieve(session.id, {
+              expand: ["line_items.data.price"],
+            });
+
+            userId =
+              userId ||
+              full.metadata?.userId ||
+              full.client_reference_id;
+
+            credits =
+              credits || Number(full.metadata?.credits || 0);
+          }
+
+          // Final validation
+          if (!userId) {
+            console.warn("⚠️ credit_pack missing userId", session.id);
+            await markProcessed(event.id);
+            return NextResponse.json({ received: true });
+          }
+
+          if (!Number.isFinite(credits) || credits <= 0) {
+            console.warn(
+              "⚠️ credit_pack invalid credits",
+              credits,
+              session.id
+            );
+            await markProcessed(event.id);
+            return NextResponse.json({ received: true });
+          }
+
+          await db.collection("users").doc(userId).update({
+            credits: admin.firestore.FieldValue.increment(credits),
+          });
+
+          await markProcessed(event.id);
+          return NextResponse.json({ received: true });
         }
 
-        await db.collection("users").doc(userId).set(
-          {
-            stripeCustomerId: session.customer,
-            stripeSubscriptionId: session.subscription,
-            subscriptionStatus: "pending",
-          },
-          { merge: true }
-        );
+        /* ---------- SUBSCRIPTION CHECKOUT ---------- */
+        if (session.mode === "subscription") {
+          const userId =
+            session.metadata?.userId || session.client_reference_id;
 
-        await markProcessed(event.id);
-        return NextResponse.json({ received: true });
+          if (!userId) {
+            await markProcessed(event.id);
+            return NextResponse.json({ received: true });
+          }
+
+          await db.collection("users").doc(userId).set(
+            {
+              stripeCustomerId: session.customer,
+              stripeSubscriptionId: session.subscription,
+              subscriptionStatus: "pending",
+            },
+            { merge: true }
+          );
+
+          await markProcessed(event.id);
+          return NextResponse.json({ received: true });
+        }
       }
     }
 
-    // ------------------------------------
-    // INVOICE PAID → GRANT CREDITS
-    // ------------------------------------
+    /* =====================================================
+       INVOICE PAID → GRANT SUBSCRIPTION CREDITS
+    ===================================================== */
+
     if (event.type === "invoice.payment_succeeded") {
       const invoice = await materialize(event);
 
@@ -153,9 +205,9 @@ export async function POST(req) {
         return NextResponse.json({ received: true });
       }
 
+      // Never grant credits for prorations
       const isProration = invoice.lines.data.some((l) => l.proration);
       if (isProration) {
-        // ⚠️ NEVER grant credits on prorations
         await markProcessed(event.id);
         return NextResponse.json({ received: true });
       }
@@ -202,32 +254,38 @@ export async function POST(req) {
       return NextResponse.json({ received: true });
     }
 
-    // ------------------------------------
-    // PAYMENT FAILED
-    // ------------------------------------
+    /* =====================================================
+       PAYMENT FAILED
+    ===================================================== */
+
     if (event.type === "invoice.payment_failed") {
       const invoice = await materialize(event);
+
       if (invoice.subscription) {
         const snap = await db
           .collection("users")
           .where("stripeSubscriptionId", "==", invoice.subscription)
           .limit(1)
           .get();
+
         if (!snap.empty) {
           await snap.docs[0].ref.update({
             subscriptionStatus: "past_due",
           });
         }
       }
+
       await markProcessed(event.id);
       return NextResponse.json({ received: true });
     }
 
-    // ------------------------------------
-    // SUBSCRIPTION CANCELED
-    // ------------------------------------
+    /* =====================================================
+       SUBSCRIPTION CANCELED
+    ===================================================== */
+
     if (event.type === "customer.subscription.deleted") {
       const sub = await materialize(event);
+
       const snap = await db
         .collection("users")
         .where("stripeSubscriptionId", "==", sub.id)

@@ -17,6 +17,11 @@ function jsonError(message, status = 500, extra = {}) {
   return NextResponse.json({ error: message, ...extra }, { status });
 }
 
+if (!STRIPE_SECRET_KEY) {
+  // Fail fast in dev so you don’t silently deploy broken billing
+  console.warn("⚠️ Missing STRIPE_SECRET_KEY");
+}
+
 const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-02-24.acacia" });
 
 const CREDIT_PACKS = {
@@ -37,28 +42,30 @@ export async function POST(req) {
       "1000": STRIPE_CREDIT_PACK_1000,
       "2000": STRIPE_CREDIT_PACK_2000,
     };
+
     const priceId = prices[String(packType)];
     if (!priceId) return jsonError(`Invalid packType '${packType}'`, 400);
 
+    const creditsForPack = CREDIT_PACKS[priceId];
+    if (!creditsForPack) return jsonError("Pack not configured correctly", 500);
+
+    // Ensure user exists (do not block based on credits!)
     const userRef = db.collection("users").doc(userId);
     const snap = await userRef.get();
     if (!snap.exists) return jsonError("User not found", 404);
-    const user = snap.data();
-
-    // Your business rule
-    if (typeof user.credits === "number" && user.credits > 0) {
-      return jsonError(
-        "You still have unused credits. Please use them before buying more.",
-        403,
-        { currentCredits: user.credits }
-      );
-    }
+    const user = snap.data() || {};
 
     // Ensure a Stripe customer
     let stripeCustomerId = user.stripeCustomerId;
+
     if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({ email, metadata: { userId } });
+      const customer = await stripe.customers.create({
+        email,
+        metadata: { userId },
+      });
+
       stripeCustomerId = customer.id;
+
       await userRef.set(
         {
           email,
@@ -74,14 +81,12 @@ export async function POST(req) {
       globalThis.crypto?.randomUUID?.() ||
       `${userId}-${Date.now()}`;
 
-    // ✅ Define the values you later reference
-    const creditsForPack = CREDIT_PACKS[priceId];
     const packName = `${creditsForPack} Credits`;
 
     const session = await stripe.checkout.sessions.create(
       {
         mode: "payment",
-        customer: stripeCustomerId, // ✅ keep this; do NOT also pass customer_email
+        customer: stripeCustomerId, // do NOT also pass customer_email
         line_items: [{ price: priceId, quantity: 1 }],
         client_reference_id: userId,
         success_url: `${NEXT_PUBLIC_CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -119,6 +124,7 @@ export async function POST(req) {
       NODE_ENV !== "production" && (error?.raw?.message || error?.message)
         ? `Unable to create checkout session: ${error.raw?.message || error.message}`
         : "Unable to create checkout session";
+
     return jsonError(msg, 500);
   }
 }

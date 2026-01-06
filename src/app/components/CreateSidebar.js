@@ -15,6 +15,7 @@ import {
   Sparkles,
   Folder as FolderIcon,
   Crown,
+  Music,
 } from 'lucide-react';
 
 /* --------------------------- styles / utilities --------------------------- */
@@ -79,6 +80,14 @@ const Icon = {
       <rect x="3" y="5" width="14" height="14" rx="2" stroke="currentColor" strokeWidth={strokeW(active, 1.6, 2)} />
       <path d="M21 8v8l-4-2.5V10.5L21 8z" stroke="currentColor" strokeWidth={strokeW(active, 1.6, 2)} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  ),
+
+   Music: ({ active }) => (
+    <Music
+      size={18}
+      className="opacity-90"
+      strokeWidth={active ? 2 : 1.6}
+    />
   ),
   Heart: ({ active }) => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="opacity-90" aria-hidden="true" focusable="false">
@@ -438,6 +447,7 @@ export default function CreateSidebar({ onNavigate }) {
         <NavItem icon={Icon.Images} label="Images" href="/create" />
         <NavItem icon={Icon.Videos} label="Videos" href="/studio/text-to-video" />
         <NavItem icon={Icon.Folder} label="Account" href="/account/billing" />
+        <NavItem icon={Icon.Music} label="Music" href="/Music" /> {/* ✅ */}
         <NavItem icon={Icon.Home} label="Home" href="/home" />
        <NavItem icon={Icon.Pricing} label="Pricing" href="/pricing" />
 

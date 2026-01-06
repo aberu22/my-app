@@ -62,7 +62,7 @@ export default function BuyCredits() {
         body: JSON.stringify({
           userId: user.uid,
           email: user.email,
-          packType: String(packAmount), // 🔒 MUST MATCH STRIPE PACK SIZE
+          packType: String(packAmount),
         }),
       });
 
@@ -121,7 +121,7 @@ export default function BuyCredits() {
         <span className="text-white font-medium">{credits}</span>
         {credits > 0 && (
           <span className="ml-2 text-zinc-500">
-            · Use existing credits before purchasing more
+            · You can top up anytime if you need more credits
           </span>
         )}
       </div>
@@ -138,7 +138,7 @@ export default function BuyCredits() {
       {/* Credit packs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         {packs.map((pack) => {
-          const disabled = loadingPack === pack.amount || credits > 0;
+          const disabled = loadingPack === pack.amount; // ✅ ONLY disable while redirecting
 
           return (
             <div
@@ -178,11 +178,7 @@ export default function BuyCredits() {
                       : "bg-white text-black hover:bg-zinc-200"
                   }`}
                 >
-                  {credits > 0
-                    ? "Use existing credits first"
-                    : loadingPack === pack.amount
-                    ? "Redirecting…"
-                    : "Buy credits"}
+                  {loadingPack === pack.amount ? "Redirecting…" : "Buy credits"}
                 </div>
               </button>
             </div>
