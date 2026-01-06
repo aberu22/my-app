@@ -31,6 +31,18 @@ const CREDIT_PACKS = {
 };
 
 export async function POST(req) {
+
+   console.log("STRIPE_SECRET_KEY exists:", !!process.env.STRIPE_SECRET_KEY);
+  console.log(
+    "STRIPE_CREDIT_PACK_1000 exists:",
+    !!process.env.STRIPE_CREDIT_PACK_1000
+  );
+  console.log(
+    "NEXT_PUBLIC_CLIENT_URL:",
+    process.env.NEXT_PUBLIC_CLIENT_URL
+  );
+
+  
   try {
     const { userId, email, packType } = await req.json();
     if (!userId || !email || !packType) {
@@ -43,6 +55,8 @@ export async function POST(req) {
       "2000": STRIPE_CREDIT_PACK_2000,
     };
 
+
+   
     const priceId = prices[String(packType)];
     if (!priceId) return jsonError(`Invalid packType '${packType}'`, 400);
 
