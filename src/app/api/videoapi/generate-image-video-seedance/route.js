@@ -1,10 +1,11 @@
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { admin, db } from "@/lib/firebase-admin";
 import { getSeedanceCreditCost } from "@/lib/creditCosts";
 
 /* ======================================================
-   CREATE TASK — Seedance Image → Video
+   CREATE TASK — SEEDANCE IMAGE → VIDEO (DOC-CORRECT)
 ====================================================== */
 export async function POST(req) {
   let userId;
@@ -21,7 +22,7 @@ export async function POST(req) {
 
     if (!Array.isArray(body.input_urls) || body.input_urls.length === 0) {
       return Response.json(
-        { error: "input_urls is required for image-to-video" },
+        { error: "At least 1 image URL is required" },
         { status: 400 }
       );
     }
@@ -43,15 +44,15 @@ export async function POST(req) {
     const decoded = await admin.auth().verifyIdToken(token);
     userId = decoded.uid;
 
-    /* ---------------- NORMALIZE INPUT ---------------- */
-    const duration = ["4", "8", "12"].includes(String(body.duration))
-      ? String(body.duration)
+    /* ---------------- SAFE SEEDANCE PARAMS ---------------- */
+    const duration = ["4", "8", "12"].includes(body.duration)
+      ? body.duration
       : "8";
 
     const resolution =
       body.resolution === "480p" || body.resolution === "720p"
         ? body.resolution
-        : "480p";
+        : "720p";
 
     const aspect_ratio = [
       "1:1",
@@ -62,18 +63,12 @@ export async function POST(req) {
       "9:16",
     ].includes(body.aspect_ratio)
       ? body.aspect_ratio
-      : "16:9";
+      : "1:1";
 
     const fixed_lens = Boolean(body.fixed_lens);
     const generate_audio = Boolean(body.generate_audio);
 
     /* ---------------- PRICING ---------------- */
-    console.log("💳 SEEDANCE I2V CHARGE", {
-      userId,
-      resolution,
-      duration,
-    });
-
     creditsToCharge = getSeedanceCreditCost({ duration, resolution });
 
     /* ---------------- DEDUCT CREDITS ---------------- */
@@ -95,7 +90,7 @@ export async function POST(req) {
 
     creditsDeducted = true;
 
-    /* ---------------- CALL SEEDANCE API ---------------- */
+    /* ---------------- CALL SEEDANCE (JSON) ---------------- */
     const response = await fetch(
       "https://api.kie.ai/api/v1/jobs/createTask",
       {
@@ -108,7 +103,7 @@ export async function POST(req) {
           model: "bytedance/seedance-1.5-pro",
           input: {
             prompt: body.prompt,
-            input_urls: body.input_urls, // ✅ REQUIRED FOR I2V
+            input_urls: body.input_urls, // 🔥 THIS IS THE KEY
             aspect_ratio,
             resolution,
             duration,
@@ -121,52 +116,41 @@ export async function POST(req) {
     );
 
     const raw = await response.text();
-    let data;
+    console.error("SEEDANCE STATUS:", response.status);
+    console.error("SEEDANCE RAW:", raw);
 
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      throw new Error("Seedance returned invalid JSON");
-    }
+    const data = JSON.parse(raw);
 
-    /* ---------------- TASK ID EXTRACTION ---------------- */
     const taskId =
-      data?.taskId ||
-      data?.task_id ||
       data?.data?.taskId ||
-      data?.data?.task_id;
+      data?.taskId ||
+      data?.task_id;
 
     if (!response.ok || !taskId) {
-      throw new Error(
-        data?.error || data?.msg || "Seedance image-to-video task failed"
-      );
+      throw new Error(data?.msg || "Seedance I2V failed");
     }
 
     return Response.json({ ...data, taskId }, { status: 200 });
 
   } catch (err) {
-    console.error("❌ Seedance I2V POST error:", err);
+    console.error("❌ Seedance I2V error:", err);
 
     /* ---------------- REFUND ON FAILURE ---------------- */
     if (creditsDeducted && userId && creditsToCharge > 0) {
-      try {
-        await db.collection("users").doc(userId).update({
-          credits: admin.firestore.FieldValue.increment(creditsToCharge),
-        });
-      } catch (refundErr) {
-        console.error("🔥 CREDIT REFUND FAILED:", refundErr);
-      }
+      await db.collection("users").doc(userId).update({
+        credits: admin.firestore.FieldValue.increment(creditsToCharge),
+      });
     }
 
     return Response.json(
-      { error: err.message || "Seedance image-to-video route failed" },
+      { error: err.message || "Seedance image-to-video failed" },
       { status: 500 }
     );
   }
 }
 
 /* ======================================================
-   POLL TASK STATUS — SAME AS T2V
+   POLL TASK STATUS
 ====================================================== */
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
@@ -182,7 +166,6 @@ export async function GET(req) {
       headers: {
         Authorization: `Bearer ${process.env.SEEDANCE_API_KEY}`,
       },
-      signal: AbortSignal.timeout(30_000),
     }
   );
 

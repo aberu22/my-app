@@ -8,6 +8,7 @@ if (!admin.apps.length) {
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
+     storageBucket: "ai-gen-5eace.firebasestorage.app",
   });
 }
 

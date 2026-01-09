@@ -11,7 +11,7 @@ export default function MusicPage() {
       <>
         <header className="mb-4">
           <h1 className="text-3xl font-semibold tracking-tight">
-            Text to Music
+            Text to Music Suno V5
           </h1>
           <p className="mt-2 text-sm text-zinc-400">
             Generate AI music with style, mood, and control.

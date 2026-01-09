@@ -32,9 +32,11 @@ export default function RootLayout({ children }) {
       <body className="font-sans antialiased">
         <AuthProvider>
           <ImageGenerationProvider>
+           
          
             <main>{children}</main>
             <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+            
           </ImageGenerationProvider>
         </AuthProvider>
       </body>

@@ -551,9 +551,19 @@ const startSeedancePolling = useCallback(
         }
 
         /* ---------------- FAIL ---------------- */
-        if (data.state === "fail") {
-          throw new Error(data.failMsg || "Seedance job failed");
-        }
+        /* ---------------- FAIL (Seedance-safe) ---------------- */
+if (data.state === "fail") {
+  const msg = String(data.failMsg || "").toLowerCase();
+
+  // ⏳ Seedance transient failure — keep polling
+  if (msg.includes("timed out") || msg.includes("timeout")) {
+    console.warn("⚠️ Seedance timeout — continuing polling");
+    return;
+  }
+
+  // ❌ Real failure
+  throw new Error(data.failMsg || "Seedance job failed");
+}
 
         /* ---------------- SUCCESS ---------------- */
         if (data.state === "success") {

@@ -18,11 +18,12 @@ function jsonError(message, status = 500, extra = {}) {
 }
 
 if (!STRIPE_SECRET_KEY) {
-  // Fail fast in dev so you don’t silently deploy broken billing
   console.warn("⚠️ Missing STRIPE_SECRET_KEY");
 }
 
-const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-02-24.acacia" });
+const stripe = new Stripe(STRIPE_SECRET_KEY, {
+  apiVersion: "2025-02-24.acacia",
+});
 
 const CREDIT_PACKS = {
   [STRIPE_CREDIT_PACK_500]: 500,
@@ -31,20 +32,12 @@ const CREDIT_PACKS = {
 };
 
 export async function POST(req) {
-
-   console.log("STRIPE_SECRET_KEY exists:", !!process.env.STRIPE_SECRET_KEY);
-  console.log(
-    "STRIPE_CREDIT_PACK_1000 exists:",
-    !!process.env.STRIPE_CREDIT_PACK_1000
-  );
-  console.log(
-    "NEXT_PUBLIC_CLIENT_URL:",
-    process.env.NEXT_PUBLIC_CLIENT_URL
-  );
-
-  
   try {
+    console.log("STRIPE_SECRET_KEY exists:", !!STRIPE_SECRET_KEY);
+    console.log("NEXT_PUBLIC_CLIENT_URL:", NEXT_PUBLIC_CLIENT_URL);
+
     const { userId, email, packType } = await req.json();
+
     if (!userId || !email || !packType) {
       return jsonError("Missing userId, email, or packType", 400);
     }
@@ -55,23 +48,40 @@ export async function POST(req) {
       "2000": STRIPE_CREDIT_PACK_2000,
     };
 
-
-   
     const priceId = prices[String(packType)];
-    if (!priceId) return jsonError(`Invalid packType '${packType}'`, 400);
+    if (!priceId) {
+      return jsonError(`Invalid packType '${packType}'`, 400);
+    }
 
     const creditsForPack = CREDIT_PACKS[priceId];
-    if (!creditsForPack) return jsonError("Pack not configured correctly", 500);
+    if (!creditsForPack) {
+      return jsonError("Pack not configured correctly", 500);
+    }
 
-    // Ensure user exists (do not block based on credits!)
+    // 🔐 Load user
     const userRef = db.collection("users").doc(userId);
     const snap = await userRef.get();
-    if (!snap.exists) return jsonError("User not found", 404);
-    const user = snap.data() || {};
+    if (!snap.exists) {
+      return jsonError("User not found", 404);
+    }
 
-    // Ensure a Stripe customer
+    const user = snap.data() || {};
     let stripeCustomerId = user.stripeCustomerId;
 
+    // 🧠 AUTO-HEAL: verify customer exists in CURRENT Stripe mode
+    if (stripeCustomerId) {
+      try {
+        await stripe.customers.retrieve(stripeCustomerId);
+      } catch (err) {
+        console.warn(
+          "⚠️ Invalid Stripe customer detected, recreating:",
+          stripeCustomerId
+        );
+        stripeCustomerId = null;
+      }
+    }
+
+    // 🆕 Create customer if missing or invalid
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
         email,
@@ -90,21 +100,25 @@ export async function POST(req) {
       );
     }
 
-    const idem =
+    // 🔁 Idempotency protection
+    const idempotencyKey =
       req.headers.get("x-idempotency-key") ||
       globalThis.crypto?.randomUUID?.() ||
       `${userId}-${Date.now()}`;
 
     const packName = `${creditsForPack} Credits`;
 
+    // 💳 Create Checkout Session
     const session = await stripe.checkout.sessions.create(
       {
         mode: "payment",
-        customer: stripeCustomerId, // do NOT also pass customer_email
+        customer: stripeCustomerId,
         line_items: [{ price: priceId, quantity: 1 }],
         client_reference_id: userId,
+
         success_url: `${NEXT_PUBLIC_CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${NEXT_PUBLIC_CLIENT_URL}/pricing`,
+
         payment_intent_data: {
           setup_future_usage: "off_session",
           metadata: {
@@ -114,6 +128,7 @@ export async function POST(req) {
             packName,
           },
         },
+
         metadata: {
           userId,
           type: "credit_pack",
@@ -121,12 +136,15 @@ export async function POST(req) {
           packName,
         },
       },
-      { idempotencyKey: idem }
+      { idempotencyKey }
     );
 
-    return NextResponse.json({ sessionId: session.id, url: session.url });
+    return NextResponse.json({
+      sessionId: session.id,
+      url: session.url,
+    });
   } catch (error) {
-    console.error("🚨 /api/buy-credits server error", {
+    console.error("🚨 /api/buy-credits error", {
       message: error?.message,
       type: error?.type,
       code: error?.code,
@@ -134,11 +152,13 @@ export async function POST(req) {
       stack: NODE_ENV !== "production" ? error?.stack : undefined,
     });
 
-    const msg =
-      NODE_ENV !== "production" && (error?.raw?.message || error?.message)
-        ? `Unable to create checkout session: ${error.raw?.message || error.message}`
+    const message =
+      NODE_ENV !== "production"
+        ? `Unable to create checkout session: ${
+            error?.raw?.message || error?.message
+          }`
         : "Unable to create checkout session";
 
-    return jsonError(msg, 500);
+    return jsonError(message, 500);
   }
 }
