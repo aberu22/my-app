@@ -945,7 +945,20 @@ const handleRecreate = (selected) => {
     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 px-4">
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="mb-4 break-inside-avoid">
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+          <div
+  className="
+    relative overflow-hidden
+    rounded-[18px]
+    bg-[var(--retro-panel)]
+    border border-[var(--retro-border)]
+    shadow-[0_20px_60px_rgba(0,0,0,0.6)]
+    transition-all duration-700 ease-out
+    cursor-pointer
+    group
+    hover:border-white/15
+    hover:shadow-[0_30px_80px_rgba(0,0,0,0.8)]
+  "
+>
             <Skeleton className="h-64 w-full bg-gradient-to-br from-white/10 to-white/5" />
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
               <Skeleton className="h-4 w-3/4 bg-white/20 rounded" />

@@ -8,24 +8,26 @@ const sora = Sora({
 });
 
 export const metadata = {
-  title: "Studio | FantasyVisionAI",
-  description: "Create images and videos with AI",
-  robots: { index: false, follow: false },
+  title: "Studio | Fantasy AI",
+  description: "Create images and videos with AI using Fantasy AI Studio.",
+  robots: {
+    index: false,
+    follow: true,
+  },
 };
 
 export default function StudioLayout({ children }) {
   return (
+    <div className={`${sora.className} min-h-dvh bg-black text-white`}>
+      {/* Sidebar persists across all studio routes */}
+      <CreateSidebar />
 
-      <div className={`${sora.className} min-h-dvh bg-black text-white`}>
-        {/* Sidebar persists across all studio routes */}
-        <CreateSidebar />
-        {/* Main canvas */}
-        <div className="sm:pl-72">
-          <main className="min-h-dvh px-4 py-6">
-            {children}
-          </main>
-        </div>
+      {/* Main canvas */}
+      <div className="sm:pl-72">
+        <main className="min-h-dvh px-4 py-6">
+          {children}
+        </main>
       </div>
-   
+    </div>
   );
 }

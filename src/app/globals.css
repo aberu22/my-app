@@ -177,6 +177,9 @@
   }
 }
 
+
+
+
 /* ========================================
    Global Polish & Enhancements
    ======================================== */
@@ -291,14 +294,12 @@
 
   /* ===== GLASS EFFECTS ===== */
   .glass {
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    background-color: hsl(var(--accent) / 0.55);
-    border: 1px solid hsl(var(--border) / 0.65);
-    border-radius: var(--radius);
-    box-shadow: 
-      0 10px 40px -12px rgba(0, 0, 0, 0.6),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+
+      backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-color: hsl(var(--accent) / 0.78);
+  border: 1px solid hsl(var(--border) / 0.5);
+    
   }
 
   .glass-heavy {

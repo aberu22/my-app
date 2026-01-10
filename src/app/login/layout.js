@@ -1,19 +1,22 @@
 export const metadata = {
   title: "Login | Fantasy AI",
   description: "Log in to your Fantasy AI account.",
+
+  metadataBase: new URL("https://getfantasyai.com"),
+
   robots: {
     index: false,
-    follow: false,
+    follow: true,
   },
-  metadataBase: new URL("https://fantasyai.com"), // your real domain
+
   openGraph: {
+    type: "website",
     title: "Login | Fantasy AI",
     description: "Access your Fantasy AI account.",
-    url: "/login",
-    type: "website",
+    url: "https://getfantasyai.com/login",
+    siteName: "Fantasy AI",
   },
 };
-
 
 export default function LoginLayout({ children }) {
   return <>{children}</>;

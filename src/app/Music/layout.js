@@ -8,9 +8,12 @@ const sora = Sora({
 });
 
 export const metadata = {
-  title: "Studio | FantasyVisionAI",
-  description: "Create images and videos with AI",
-  robots: { index: false, follow: false },
+  title: "Music Studio | Fantasy AI",
+  description: "Generate AI-powered music and audio with Fantasy AI Studio.",
+  robots: {
+    index: false,
+    follow: true,
+  },
 };
 
 export default function MusicLayout({ children }) {
